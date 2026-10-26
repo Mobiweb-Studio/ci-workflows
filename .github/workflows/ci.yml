@@ -11,8 +11,9 @@ name: ci
 #   jira-project-key    When set, only keys of this Jira project pass. Pass `${{ vars.JIRA_PROJECT_KEY }}`.
 # Secrets: none.
 # Token permissions the caller job must grant: contents: read.
-# Files read from the project: .nvmrc, package.json with the scripts typecheck, lint, test, fsd, dead-code and
-# vendor-isolation, a commitlint config, pnpm-lock.yaml, and the boilerplate's .setup-pending marker.
+XX# vendor-isolation (the last three run only when the project has them, so a project that declined the architecture
+# or dead-code module just has no such script), a commitlint config, pnpm-lock.yaml, and the boilerplate's
+# .setup-pending marker. The workflow assumes pnpm.
 # The caller owns the trigger (pull_request: opened, synchronize, reopened, edited) and the concurrency group.
 on:
   workflow_call:
@@ -53,9 +54,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
-      - run: pnpm fsd
-      - run: pnpm dead-code
-      - run: pnpm vendor-isolation
+      - run: pnpm run --if-present fsd
+      - run: pnpm run --if-present dead-code
+      - run: pnpm run --if-present vendor-isolation
 
   commits:
     runs-on: ${{ inputs.runner }}

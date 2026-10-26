@@ -59,6 +59,17 @@ describe("ci.yml stage order", () => {
   });
 });
 
+describe("ci.yml optional checks", () => {
+  it("runs the layout, dead-code and vendor-isolation scripts only when the project has them", () => {
+    for (const script of ["fsd", "dead-code", "vendor-isolation"]) {
+      expect(blocks.checks).toContain(`pnpm run --if-present ${script}`);
+    }
+    for (const script of ["typecheck", "lint", "test"]) {
+      expect(blocks.checks).toMatch(new RegExp(`- run: pnpm ${script}$`, "m"));
+    }
+  });
+});
+
 describe("the APK actions", () => {
   const build = read("actions", "build-android-apk", "action.yml");
   const deviceApk = read("actions", "device-apk", "action.yml");
