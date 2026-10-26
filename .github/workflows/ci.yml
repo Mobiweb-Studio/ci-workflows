@@ -93,7 +93,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.0.0-rc.2
       - name: Require a Jira ticket key in the branch name and PR title
         env:
           BRANCH: ${{ github.head_ref }}

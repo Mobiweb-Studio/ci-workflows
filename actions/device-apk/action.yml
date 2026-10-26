@@ -70,7 +70,7 @@ runs:
           --android-build-tools-dir "$BUILD_TOOLS"
     - name: Build the APK, none was cached for this fingerprint
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-      uses: Mobiweb-Studio/ci-workflows/actions/build-android-apk@main
+      uses: Mobiweb-Studio/ci-workflows/actions/build-android-apk@v1.0.0-rc.2
       with:
         reference-vendor: ${{ inputs.reference-vendor }}
     - name: Keep the new APK for the next runs with this fingerprint
