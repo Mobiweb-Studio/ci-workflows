@@ -100,12 +100,12 @@ jobs:
         with:
           fetch-depth: 0
       - id: maestro
-        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@main
+        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@v1.0.0-rc.4
         with:
           check: maestro
           github-token: ${{ github.token }}
       - id: qa
-        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@main
+        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@v1.0.0-rc.4
         with:
           check: qa
           github-token: ${{ github.token }}
@@ -123,7 +123,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Wait for the checks of the earlier stages
-        uses: Mobiweb-Studio/ci-workflows/actions/wait-for-checks@main
+        uses: Mobiweb-Studio/ci-workflows/actions/wait-for-checks@v1.0.0-rc.4
         with:
           checks: ${{ inputs.earlier-checks }}
           timeout-seconds: "900"
@@ -138,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: apk
-        uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
+        uses: Mobiweb-Studio/ci-workflows/actions/device-apk@v1.0.0-rc.4
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
       - name: Keep the APK for the device jobs
@@ -162,7 +162,7 @@ jobs:
       MAESTRO_VERSION: 2.10.0
     steps:
       - uses: actions/checkout@v7
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.0.0-rc.4
       - name: Stop when an earlier stage did not pass
         if: ${{ needs.gate.result != 'success' || needs.apk.result != 'success' }}
         env:
@@ -175,7 +175,7 @@ jobs:
         with:
           name: device-apk
           path: android/app/build/outputs/apk/release
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@v1.0.0-rc.4
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
       - name: Enable KVM for the emulator
@@ -226,7 +226,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.0.0-rc.4
       - name: Stop when an earlier stage did not pass
         if: ${{ needs.gate.result != 'success' || needs.apk.result != 'success' }}
         env:
@@ -239,7 +239,7 @@ jobs:
         with:
           name: device-apk
           path: android/app/build/outputs/apk/release
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@v1.0.0-rc.4
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
       - name: Enable KVM for the emulator
@@ -342,7 +342,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.0.0-rc.4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
