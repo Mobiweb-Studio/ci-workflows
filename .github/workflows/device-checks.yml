@@ -13,6 +13,9 @@ name: device-checks
 #                     runner that has both. Default: the Blacksmith label the boilerplate uses.
 #   reference-vendor  The vendor folder to build and test; empty means "default". Pass
 #                     `${{ vars.REFERENCE_VENDOR }}`.
+#   maestro, qa-agent true by default. A project that declined a device check (docs/modules in the boilerplate)
+#                     passes false, and that check never runs: its job is skipped and the shared APK is made
+#                     only for the other one.
 #   earlier-checks    The checks of the earlier stages the gate waits for, one per line. Default: the names the
 #                     shared `ci` and `docs-check` workflows report when their caller jobs are `ci` and
 #                     `docs-check`.
@@ -40,6 +43,12 @@ on:
       reference-vendor:
         type: string
         default: ""
+      maestro:
+        type: boolean
+        default: true
+      qa-agent:
+        type: boolean
+        default: true
       earlier-checks:
         type: string
         default: |
@@ -69,8 +78,8 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      run_maestro: ${{ steps.maestro.outputs.run }}
-      run_qa: ${{ steps.qa.outputs.run }}
+      run_maestro: ${{ steps.maestro.outputs.run == 'true' && inputs.maestro }}
+      run_qa: ${{ steps.qa.outputs.run == 'true' && inputs.qa-agent }}
     steps:
       - name: Require a pull_request event
         env:

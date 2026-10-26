@@ -30,7 +30,7 @@ The repository is public so that projects in other GitHub organisations can call
 | `release.yml` | `release` | release-please, then the store build and submit when a release PR merges. |
 | `hotfix-ota.yml` | `hotfix` | A JS-only production update, started by hand. |
 
-Every workflow takes a `runner` input that defaults to the Blacksmith label the boilerplate uses. A project without Blacksmith passes its own label; the emulator jobs need KVM and a large disk.
+`device-checks` also takes `maestro` and `qa-agent`, both true by default, so a project that declined a device check passes false and that check never runs. Every workflow takes a `runner` input that defaults to the Blacksmith label the boilerplate uses. A project without Blacksmith passes its own label; the emulator jobs need KVM and a large disk.
 
 ### What a project provides
 

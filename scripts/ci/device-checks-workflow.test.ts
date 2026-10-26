@@ -78,6 +78,17 @@ describe("device-checks.yml", () => {
     }
   });
 
+  it("lets a project that declined a device check switch it off, and runs both by default", () => {
+    expect(workflow).toMatch(/maestro:\n {8}type: boolean\n {8}default: true\n/);
+    expect(workflow).toMatch(/qa-agent:\n {8}type: boolean\n {8}default: true\n/);
+    expect(blocks.changes).toContain(
+      "run_maestro: ${{ steps.maestro.outputs.run == 'true' && inputs.maestro }}",
+    );
+    expect(blocks.changes).toContain(
+      "run_qa: ${{ steps.qa.outputs.run == 'true' && inputs.qa-agent }}",
+    );
+  });
+
   it("asks the gate once for each check", () => {
     expect(blocks.changes).toMatch(/check: maestro/);
     expect(blocks.changes).toMatch(/check: qa/);
