@@ -14,7 +14,9 @@ name: hotfix-ota
 #   message           What this update fixes.
 #   runner            Optional. The runner label. Default: the Blacksmith label the boilerplate uses.
 # Secrets, read from the project's `production-release` environment, which the job declares: EXPO_TOKEN, and
-# optionally SENTRY_AUTH_TOKEN for the source map upload. The environment's branch rule limits which branch the
+# optionally SENTRY_AUTH_TOKEN for the source map upload.
+# Declared here so the workflow can name them. The caller does not pass them: the job declares the environment, and
+# that environment's secret, in the calling repository, is the one used (a shared workflow sees only the secrets it declares). The environment's branch rule limits which branch the
 # caller workflow can be started from; it does not check the ref input, which the steps below validate.
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: .nvmrc, package.json with the scripts typecheck and test, pnpm-lock.yaml, eas.json,
@@ -42,6 +44,11 @@ on:
       runner:
         type: string
         default: blacksmith-2vcpu-ubuntu-2404
+    secrets:
+      EXPO_TOKEN:
+        required: false
+      SENTRY_AUTH_TOKEN:
+        required: false
 
 jobs:
   hotfix:

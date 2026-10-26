@@ -12,6 +12,8 @@ name: jira-evidence-merge
 #                     The Jira site, the account's e-mail and the project key. Pass the repository variables
 #                     JIRA_BASE_URL, JIRA_EMAIL and JIRA_PROJECT_KEY.
 # Secrets: JIRA_API_TOKEN comes from the project's `jira-evidence` environment, which the job declares.
+# Declared here so the workflow can name them. The caller does not pass them: the job declares the environment, and
+# that environment's secret, in the calling repository, is the one used (a shared workflow sees only the secrets it declares).
 # Token permissions the caller job must grant: contents: read, actions: read.
 # Files read from the project: .nvmrc.
 # Runs only on the `pull_request` event, never `pull_request_target` or `workflow_run`: any other event fails the
@@ -35,6 +37,9 @@ on:
       jira-project-key:
         type: string
         default: ""
+    secrets:
+      JIRA_API_TOKEN:
+        required: false
 
 jobs:
   jira-evidence:
