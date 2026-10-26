@@ -6,9 +6,11 @@ name: tag-release
 # moves its floating major (v1) to the new tag, but only when `rehearsal-passed` is true, and never for a candidate.
 # Rollback is moving the floating major back to the previous exact tag by hand.
 #
-# The job runs in the protected environment `release`, whose required reviewers approve every run. The tag
-# ruleset on `v*` must let this workflow create and move tags (the GitHub Actions app as a bypass actor); nobody
-# else can.
+# The job runs in the protected environment `release`, whose required reviewers approve every run. The release
+# commit changes workflow files, and GitHub does not let the built-in token push that, so the environment holds
+# a secret, RELEASE_PUSH_TOKEN: a fine-grained token (or a GitHub App token) for this repository with contents
+# write and workflows write. The tag ruleset on `v*` lets only the maintainers and that token's owner create or
+# move tags.
 on:
   workflow_dispatch:
     inputs:
@@ -40,9 +42,18 @@ jobs:
             echo "The version must look like 1.2.3 or 1.2.3-rc.1, got: $VERSION" >&2
             exit 1
           fi
+      - name: Require the push token
+        env:
+          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_PUSH_TOKEN" ]; then
+            echo "RELEASE_PUSH_TOKEN is not set in the release environment. The release commit changes workflow files, which the built-in token cannot push." >&2
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
       - name: Refuse a version that already has a tag
         env:
           VERSION: ${{ inputs.version }}

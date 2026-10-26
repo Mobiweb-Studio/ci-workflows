@@ -55,7 +55,7 @@ A release commit rewrites the internal references between workflows and actions 
 
 ## Maintaining this repository
 
-The owner sets these in the repository settings: a ruleset on `main` (pull request, code-owner review, no force-push, no bypass), a tag ruleset limiting `v*` tags to the maintainers team and the GitHub Actions app that runs `tag-release`, read-only default workflow permissions, approval required for every outside-collaborator workflow run, two-factor for members with write access, and a `release` environment with required reviewers. The repository's own workflows run on `pull_request` with a read-only token and GitHub-hosted runners, and `tag-release` is started by hand from `main` only.
+The owner sets these in the repository settings: a ruleset on `main` (pull request, code-owner review, no force-push, no bypass), a tag ruleset limiting `v*` tags to the maintainers team and the GitHub Actions app that runs `tag-release`, read-only default workflow permissions, approval required for every outside-collaborator workflow run, two-factor for members with write access, and a `release` environment with required reviewers and the secret `RELEASE_PUSH_TOKEN`, a fine-grained token (or GitHub App token) for this repository with contents write and workflows write. The release commit changes workflow files, which the built-in token cannot push. The repository's own workflows run on `pull_request` with a read-only token and GitHub-hosted runners, and `tag-release` is started by hand from `main` only.
 
 `pnpm test` runs the script tests and the workflow-shape tests, `pnpm typecheck` checks them, and `pnpm lint:workflows` runs actionlint through Docker.
 

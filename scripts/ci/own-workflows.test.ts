@@ -40,11 +40,19 @@ describe("tag-release.yml", () => {
     expect(text).toMatch(/\n {4}permissions:\n {6}contents: write\n/);
   });
 
+  it("pushes with the token of the release environment, which the built-in token cannot replace, and stops without it", () => {
+    expect(text).toContain("RELEASE_PUSH_TOKEN is not set in the release environment");
+    expect(text).toContain("token: ${{ secrets.RELEASE_PUSH_TOKEN }}");
+    expect(text.indexOf("Require the push token")).toBeLessThan(
+      text.indexOf("actions/checkout@v7"),
+    );
+  });
+
   it("refuses a malformed version and an existing tag, and passes inputs through the environment only", () => {
     expect(text).toContain("The version must look like");
     expect(text).toContain("Tags are immutable");
     for (const line of text.split("\n").filter((l) => l.includes("${{ inputs."))) {
-      expect(line).toMatch(/^\s+(VERSION|REHEARSAL_PASSED): \$\{\{ inputs\.[\w-]+ \}\}$|^\s+description|default/);
+      expect(line).toMatch(/^\s+(VERSION|REHEARSAL_PASSED|RELEASE_PUSH_TOKEN): \$\{\{ (inputs|secrets)\.[\w-]+ \}\}$|^\s+description|default/);
     }
   });
 
