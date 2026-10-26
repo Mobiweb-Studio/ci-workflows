@@ -1,7 +1,8 @@
 // Points every reference from one shared workflow or action to another at a ref.
 //   node scripts/set-ref.mjs <ref> [<root>]
 // On main the references name `main`, so the repository's own checks exercise the code under review. A release
-// rewrites them to the release's exact tag (v1.2.3, v1.2.3-rc.1), so a caller pinned to that tag, or to the
+// rewrites them to the release's exact tag (the shared workflows reach the actions and each other by reference;
+// the repository's own self-test and tag-release workflows reference nothing) (v1.2.3, v1.2.3-rc.1), so a caller pinned to that tag, or to the
 // floating major that moves to it, pulls actions that match the workflow. The caller examples are left alone:
 // they name the major, which a maintainer changes by hand when cutting a new major.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -18,7 +19,6 @@ function files(root) {
   const found = [];
   const workflows = join(root, ".github", "workflows");
   for (const name of readdirSync(workflows)) {
-    // The repository's own workflows call nothing here by reference.
     if (name.endsWith(".yml")) found.push(join(workflows, name));
   }
   const actions = join(root, "actions");

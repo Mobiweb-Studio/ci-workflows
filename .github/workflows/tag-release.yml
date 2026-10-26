@@ -53,7 +53,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          # The push token is not stored in the checkout: install and test run project code, and only the two
+          # push steps below see the token.
+          persist-credentials: false
       - name: Refuse a version that already has a tag
         env:
           VERSION: ${{ inputs.version }}
@@ -71,17 +73,19 @@ jobs:
       - name: Point the internal references at this release and tag it
         env:
           VERSION: ${{ inputs.version }}
+          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
         run: |
           node scripts/set-ref.mjs "v$VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "chore(release): v$VERSION"
           git tag "v$VERSION"
-          git push origin "refs/tags/v$VERSION"
+          git push "https://x-access-token:${RELEASE_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/v$VERSION"
       - name: Move the floating major
         env:
           VERSION: ${{ inputs.version }}
           REHEARSAL_PASSED: ${{ inputs.rehearsal-passed }}
+          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
         run: |
           case "$VERSION" in
             *-rc.*) echo "A release candidate does not move the floating major."; exit 0 ;;
@@ -90,7 +94,11 @@ jobs:
             echo "The rehearsal was not recorded as passed: v$VERSION is tagged and the floating major stays where it is."
             exit 0
           fi
+          if [ -z "$(git tag -l "v$VERSION-rc.*")" ]; then
+            echo "No release candidate v$VERSION-rc.N exists. Tag and rehearse a candidate first: v$VERSION is tagged and the floating major stays where it is."
+            exit 0
+          fi
           MAJOR="v${VERSION%%.*}"
           git tag -f "$MAJOR" "v$VERSION"
-          git push --force origin "refs/tags/$MAJOR"
+          git push --force "https://x-access-token:${RELEASE_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$MAJOR"
           echo "$MAJOR now points at v$VERSION."

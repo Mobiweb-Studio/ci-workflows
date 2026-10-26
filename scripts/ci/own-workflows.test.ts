@@ -42,10 +42,16 @@ describe("tag-release.yml", () => {
 
   it("pushes with the token of the release environment, which the built-in token cannot replace, and stops without it", () => {
     expect(text).toContain("RELEASE_PUSH_TOKEN is not set in the release environment");
-    expect(text).toContain("token: ${{ secrets.RELEASE_PUSH_TOKEN }}");
     expect(text.indexOf("Require the push token")).toBeLessThan(
       text.indexOf("actions/checkout@v7"),
     );
+    // Install and test run project code, so the token is kept out of the checkout and out of those steps.
+    expect(text).toContain("persist-credentials: false");
+    const pushStep = text.indexOf("- name: Point the internal references");
+    // Only the guard before the checkout reads the secret; install and test do not.
+    expect(text.slice(0, pushStep).match(/secrets\.RELEASE_PUSH_TOKEN/g)).toHaveLength(1);
+    const afterPushStep = text.slice(text.indexOf("- name: Point the internal references"));
+    expect(afterPushStep.match(/secrets\.RELEASE_PUSH_TOKEN/g)).toHaveLength(2);
   });
 
   it("refuses a malformed version and an existing tag, and passes inputs through the environment only", () => {
@@ -62,6 +68,11 @@ describe("tag-release.yml", () => {
     expect(move.indexOf("*-rc.*")).toBeLessThan(move.indexOf("git tag -f"));
     expect(move.indexOf('"$REHEARSAL_PASSED" != "true"')).toBeGreaterThan(-1);
     expect(move.indexOf('"$REHEARSAL_PASSED" != "true"')).toBeLessThan(
+      move.indexOf("git tag -f"),
+    );
+    // A final release needs a candidate that was rehearsed: its rc tag has to exist.
+    expect(move.indexOf('git tag -l "v$VERSION-rc.*"')).toBeGreaterThan(-1);
+    expect(move.indexOf('git tag -l "v$VERSION-rc.*"')).toBeLessThan(
       move.indexOf("git tag -f"),
     );
   });

@@ -60,10 +60,18 @@ describe("ci.yml stage order", () => {
 });
 
 describe("ci.yml optional checks", () => {
-  it("runs the layout, dead-code and vendor-isolation scripts only when the project has them", () => {
+  it("runs the layout, dead-code and vendor-isolation scripts unless the project switched them off, and never skips a missing script", () => {
     for (const script of ["fsd", "dead-code", "vendor-isolation"]) {
-      expect(blocks.checks).toContain(`pnpm run --if-present ${script}`);
+      expect(ci).toMatch(
+        new RegExp(
+          `${script}:\\n {8}type: boolean\\n {8}default: true\\n`,
+        ),
+      );
+      expect(blocks.checks).toContain(
+        `- if: \${{ inputs.${script} }}\n        run: pnpm ${script}\n`,
+      );
     }
+    expect(ci).not.toContain("--if-present");
     for (const script of ["typecheck", "lint", "test"]) {
       expect(blocks.checks).toMatch(new RegExp(`- run: pnpm ${script}$`, "m"));
     }

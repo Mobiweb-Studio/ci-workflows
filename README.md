@@ -30,7 +30,7 @@ The repository is public so that projects in other GitHub organisations can call
 | `release.yml` | `release` | release-please, then the store build and submit when a release PR merges. |
 | `hotfix-ota.yml` | `hotfix` | A JS-only production update, started by hand. |
 
-`device-checks` also takes `maestro` and `qa-agent`, both true by default, so a project that declined a device check passes false and that check never runs. Every workflow takes a `runner` input that defaults to the Blacksmith label the boilerplate uses. A project without Blacksmith passes its own label; the emulator jobs need KVM and a large disk.
+`ci` takes `fsd`, `dead-code` and `vendor-isolation`, true by default, for a project that declined that module; a step that is on and whose script is missing fails. `device-checks` also takes `maestro` and `qa-agent`, both true by default, so a project that declined a device check passes false and that check never runs. Every workflow takes a `runner` input that defaults to the Blacksmith label the boilerplate uses. A project without Blacksmith passes its own label; the emulator jobs need KVM and a large disk.
 
 ### What a project provides
 
@@ -55,7 +55,7 @@ A release commit rewrites the internal references between workflows and actions 
 
 ## Maintaining this repository
 
-The owner sets these in the repository settings: a ruleset on `main` (pull request, code-owner review, no force-push, no bypass), a tag ruleset limiting `v*` tags to the maintainers team and the GitHub Actions app that runs `tag-release`, read-only default workflow permissions, approval required for every outside-collaborator workflow run, two-factor for members with write access, and a `release` environment with required reviewers and the secret `RELEASE_PUSH_TOKEN`, a fine-grained token (or GitHub App token) for this repository with contents write and workflows write. The release commit changes workflow files, which the built-in token cannot push. The repository's own workflows run on `pull_request` with a read-only token and GitHub-hosted runners, and `tag-release` is started by hand from `main` only.
+The owner sets these in the repository settings: a ruleset on `main` (pull request, code-owner review, no force-push, no bypass), a tag ruleset limiting `v*` tags to the maintainers team and the GitHub Actions app that runs `tag-release`, read-only default workflow permissions, approval required for every outside-collaborator workflow run, two-factor for members with write access, and a `release` environment with required reviewers and the secret `RELEASE_PUSH_TOKEN`, a fine-grained token (or GitHub App token) for this repository with contents write and workflows write (only the two push steps read it). A final release also needs its release candidate tag (`v1.2.3-rc.N`) to exist before `v1` moves. The release commit changes workflow files, which the built-in token cannot push. The repository's own workflows run on `pull_request` with a read-only token and GitHub-hosted runners, and `tag-release` is started by hand from `main` only.
 
 `pnpm test` runs the script tests and the workflow-shape tests, `pnpm typecheck` checks them, and `pnpm lint:workflows` runs actionlint through Docker.
 

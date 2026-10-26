@@ -9,11 +9,15 @@ name: ci
 #   require-ticket-key  true to fail a feat/ or fix/ branch whose name or PR title lacks the Jira key. Pass
 #                       `${{ vars.REQUIRE_TICKET_KEY == 'true' }}`.
 #   jira-project-key    When set, only keys of this Jira project pass. Pass `${{ vars.JIRA_PROJECT_KEY }}`.
+#   fsd, dead-code, vendor-isolation
+#                       true by default. A project that declined the architecture, dead-code or vendor module
+#                       passes false for it, and that step is skipped. A step that is on and whose script is
+#                       missing fails, so a removed or misspelled script cannot make a check pass silently.
 # Secrets: none.
 # Token permissions the caller job must grant: contents: read.
-XX# vendor-isolation (the last three run only when the project has them, so a project that declined the architecture
-# or dead-code module just has no such script), a commitlint config, pnpm-lock.yaml, and the boilerplate's
-# .setup-pending marker. The workflow assumes pnpm.
+# Files read from the project: .nvmrc, package.json with the scripts typecheck, lint, test, fsd, dead-code and
+# vendor-isolation (the last three unless their input is false), a commitlint config, pnpm-lock.yaml, and the
+# boilerplate's .setup-pending marker. The workflow assumes pnpm.
 # The caller owns the trigger (pull_request: opened, synchronize, reopened, edited) and the concurrency group.
 on:
   workflow_call:
@@ -27,6 +31,15 @@ on:
       jira-project-key:
         type: string
         default: ""
+      fsd:
+        type: boolean
+        default: true
+      dead-code:
+        type: boolean
+        default: true
+      vendor-isolation:
+        type: boolean
+        default: true
 
 jobs:
   checks:
@@ -54,9 +67,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
-      - run: pnpm run --if-present fsd
-      - run: pnpm run --if-present dead-code
-      - run: pnpm run --if-present vendor-isolation
+      - if: ${{ inputs.fsd }}
+        run: pnpm fsd
+      - if: ${{ inputs.dead-code }}
+        run: pnpm dead-code
+      - if: ${{ inputs.vendor-isolation }}
+        run: pnpm vendor-isolation
 
   commits:
     runs-on: ${{ inputs.runner }}
