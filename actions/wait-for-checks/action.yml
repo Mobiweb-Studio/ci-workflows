@@ -1,0 +1,30 @@
+name: Wait for checks
+description: >
+  Waits until the named checks of the pull request's head commit have all passed, and fails on the first one that
+  did not (scripts/ci/wait-for-checks.mjs, ADR 0018). Used to start a later stage of the pull request checks only
+  after the earlier ones passed, where the stages are in different workflows. The caller checks out the
+  repository first, and the job needs the permission `checks: read`.
+inputs:
+  checks:
+    description: The names of the checks to wait for, one per line.
+    required: true
+  timeout-seconds:
+    description: How long to wait before failing.
+    required: false
+    default: "900"
+  github-token:
+    description: A token that can read the check runs of the repository.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPOSITORY: ${{ github.repository }}
+        # The pull request's head commit holds the check runs; the merge commit of the event has none.
+        COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        CHECKS: ${{ inputs.checks }}
+        TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/ci/wait-for-checks.mjs"

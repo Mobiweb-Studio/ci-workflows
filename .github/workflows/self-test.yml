@@ -1,0 +1,31 @@
+name: self-test
+
+# The repository's own checks: the moved script and workflow-shape tests, a type check of them, and actionlint
+# over every workflow, action and caller example. A mistake here reaches every project's CI at once, so this runs
+# on every change. It runs on the pull_request event with a read-only token and GitHub-hosted runners only, never
+# pull_request_target and never a runner a fork PR can reach.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Lint the workflows and actions
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "$PWD:/repo" -w /repo \
+            rhysd/actionlint:1.7.7 -color

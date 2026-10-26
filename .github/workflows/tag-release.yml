@@ -1,0 +1,85 @@
+name: tag-release
+
+# Cuts a release of the shared workflows. Started by hand from `main` only. It runs the tests, rewrites the
+# internal references to the release's own exact tag, commits that, and tags it. A release candidate
+# (1.2.3-rc.1) is tagged and nothing else moves, so a scratch project can rehearse it. A release (1.2.3) also
+# moves its floating major (v1) to the new tag, but only when `rehearsal-passed` is true, and never for a candidate.
+# Rollback is moving the floating major back to the previous exact tag by hand.
+#
+# The job runs in the protected environment `release`, whose required reviewers approve every run. The tag
+# ruleset on `v*` must let this workflow create and move tags (the GitHub Actions app as a bypass actor); nobody
+# else can.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The version without the v, such as 1.2.3 or 1.2.3-rc.1"
+        required: true
+      rehearsal-passed:
+        description: "A scratch project's CI passed against this release's candidate tag"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    # Never from another branch: the tagged commit is main plus the one reference rewrite.
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Check the version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
+            echo "The version must look like 1.2.3 or 1.2.3-rc.1, got: $VERSION" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Refuse a version that already has a tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
+            echo "The tag v$VERSION exists. Tags are immutable: pick the next version." >&2
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - name: Point the internal references at this release and tag it
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          node scripts/set-ref.mjs "v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): v$VERSION"
+          git tag "v$VERSION"
+          git push origin "refs/tags/v$VERSION"
+      - name: Move the floating major
+        env:
+          VERSION: ${{ inputs.version }}
+          REHEARSAL_PASSED: ${{ inputs.rehearsal-passed }}
+        run: |
+          case "$VERSION" in
+            *-rc.*) echo "A release candidate does not move the floating major."; exit 0 ;;
+          esac
+          if [ "$REHEARSAL_PASSED" != "true" ]; then
+            echo "The rehearsal was not recorded as passed: v$VERSION is tagged and the floating major stays where it is."
+            exit 0
+          fi
+          MAJOR="v${VERSION%%.*}"
+          git tag -f "$MAJOR" "v$VERSION"
+          git push --force origin "refs/tags/$MAJOR"
+          echo "$MAJOR now points at v$VERSION."

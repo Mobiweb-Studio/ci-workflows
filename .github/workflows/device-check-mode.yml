@@ -1,0 +1,64 @@
+name: device-check-mode
+
+# Keeps one comment on the PR that says whether the two device checks run, and why. It is the only writer
+# of that comment, and it never starts a device check. Called from the project's own `device-check-mode.yml`,
+# whose job id is `device-check-mode`.
+#
+# Inputs
+#   runner  The runner label. Default: the Blacksmith label the boilerplate uses.
+# Secrets: none.
+# Token permissions the caller job must grant: contents: read, pull-requests: write.
+# Files read from the project: the git history of the PR; the device-check paths listed in
+# scripts/ci/device-check-mode.mjs of this repository.
+# Runs only on the `pull_request` event: a PR from another repository's fork gets no comment, and any other event
+# fails the first job, because the comment holds nothing a fork should be able to write.
+# The caller owns the trigger (pull_request: opened, reopened, synchronize, ready_for_review, converted_to_draft,
+# labeled, unlabeled, edited) and the concurrency group.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: blacksmith-2vcpu-ubuntu-2404
+
+jobs:
+  mode-comment:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Require a pull_request event
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "This workflow runs on the pull_request event only, not $EVENT_NAME: fork code must never reach it." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - id: gate
+        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@main
+        with:
+          command: comment
+          github-token: ${{ github.token }}
+      - name: Write the comment
+        # A fork's token cannot comment, so only a PR from this repository gets one.
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ steps.gate.outputs.base-ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          COMMENT_FILE: ${{ steps.gate.outputs.comment-file }}
+        run: |
+          # A PR into the default branch gets the comment. A PR into another branch only has an existing
+          # comment updated, so a PR that was retargeted does not keep a stale mode.
+          only_existing=""
+          if [ "$BASE_REF" != "$DEFAULT_BRANCH" ]; then
+            only_existing="--only-existing"
+          fi
+          bash "$CI_WORKFLOWS_DIR/scripts/ci/upsert-pr-comment.sh" $only_existing device-check-mode "$PR_NUMBER" "$COMMENT_FILE"

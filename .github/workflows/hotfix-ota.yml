@@ -1,0 +1,151 @@
+name: hotfix-ota
+
+# Ships a JS-only fix to production users without a store release. Start it by hand from the project's Actions
+# tab. Cut a branch from the release tag that is live in production, cherry-pick the fix onto it, and name that
+# branch as the ref. A ref that carries commits from main past that tag is refused, so unreleased work never
+# reaches users. It also refuses when the native fingerprint differs from the build live in each store. Called
+# from the project's own `hotfix-ota.yml`, whose job id is `hotfix`.
+#
+# Inputs: the five the caller's workflow_dispatch collects and passes on, all required.
+#   ref               The branch (or the tag itself) that holds the fix, built on the live release tag.
+#   live-tag          The release tag (v1.2.3) that is live in store production.
+#   android-build-id  EAS build id of the Android build live in Google Play production.
+#   ios-build-id      EAS build id of the iOS build live in the App Store.
+#   message           What this update fixes.
+#   runner            Optional. The runner label. Default: the Blacksmith label the boilerplate uses.
+# Secrets, read from the project's `production-release` environment, which the job declares: EXPO_TOKEN, and
+# optionally SENTRY_AUTH_TOKEN for the source map upload. The environment's branch rule limits which branch the
+# caller workflow can be started from; it does not check the ref input, which the steps below validate.
+# Token permissions the caller job must grant: contents: read.
+# Files read from the project: .nvmrc, package.json with the scripts typecheck and test, pnpm-lock.yaml, eas.json,
+# vendors/default/vendor.json.
+# The caller owns the trigger (workflow_dispatch with those inputs). Pin this caller to an exact tag, and require
+# reviewers on the `production-release` environment, because the job holds production credentials.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      live-tag:
+        type: string
+        required: true
+      android-build-id:
+        type: string
+        required: true
+      ios-build-id:
+        type: string
+        required: true
+      message:
+        type: string
+        required: true
+      runner:
+        type: string
+        default: blacksmith-2vcpu-ubuntu-2404
+
+jobs:
+  hotfix:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    # Holds EXPO_TOKEN. The environment's branch rule limits which branch the caller can be started from;
+    # it does not check the ref input, which the steps below validate.
+    environment: production-release
+    concurrency:
+      group: hotfix-ota
+      cancel-in-progress: false
+    steps:
+      - name: Require the Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is not set in the production-release environment. See docs/ai/first-release.md." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - name: Require a ref built on the live release, with no unreleased commits from main
+        env:
+          LIVE_TAG: ${{ inputs.live-tag }}
+        run: |
+          case "$LIVE_TAG" in
+            v*) ;;
+            *) echo "live-tag must be a release tag such as v1.2.3." >&2; exit 1 ;;
+          esac
+          if ! git rev-parse -q --verify "refs/tags/$LIVE_TAG" > /dev/null; then
+            echo "The tag $LIVE_TAG does not exist." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$LIVE_TAG" HEAD; then
+            echo "The ref must be $LIVE_TAG or a branch built on it." >&2
+            exit 1
+          fi
+          UNRELEASED=$(comm -12 <(git rev-list "$LIVE_TAG"..HEAD | sort) <(git rev-list "$LIVE_TAG"..origin/main | sort))
+          if [ -n "$UNRELEASED" ]; then
+            echo "The ref carries commits from main that are not in $LIVE_TAG. Cut the branch from the tag and cherry-pick the fix." >&2
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      # The token is only set from here on, so the install and the tests above never see it.
+      - uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Require the same native fingerprint as the live builds
+        # An update is only safe on a build with identical native code. If this fails, ship a
+        # store release instead.
+        env:
+          ANDROID_BUILD_ID: ${{ inputs.android-build-id }}
+          IOS_BUILD_ID: ${{ inputs.ios-build-id }}
+        run: |
+          check() {
+            PLATFORM="$1"; LIVE_ID="$2"
+            HASH=$(eas fingerprint:generate --platform "$PLATFORM" --build-profile production --json --non-interactive | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).hash")
+            if [ -z "$HASH" ] || [ "$HASH" = "undefined" ]; then
+              echo "Could not read the $PLATFORM fingerprint from eas fingerprint:generate." >&2
+              exit 1
+            fi
+            if ! eas build:list --platform "$PLATFORM" --fingerprint-hash "$HASH" --json --non-interactive | node -e "process.exit(JSON.parse(require('fs').readFileSync(0,'utf8')).some((b) => b.id === process.argv[1]) ? 0 : 1)" "$LIVE_ID"; then
+              echo "The native code changed since the live $PLATFORM build ($LIVE_ID). A store release is needed." >&2
+              exit 1
+            fi
+          }
+          check android "$ANDROID_BUILD_ID"
+          check ios "$IOS_BUILD_ID"
+      - name: Export the bundle with source maps
+        # Sentry matches an update's source maps to it by an id built into the bundle, so the update
+        # below publishes this export instead of bundling again.
+        run: pnpm exec expo export --dump-sourcemap
+      - name: Publish to the production channel
+        env:
+          MESSAGE: ${{ inputs.message }}
+        run: eas update --channel production --message "$MESSAGE" --skip-bundler --non-interactive
+      - name: Upload the source maps to Sentry
+        # Only for a vendor with a Sentry project and a token. The script comes from the locked
+        # @sentry/react-native, never from a package fetched now, because this job holds production
+        # credentials. The token is set for this step only.
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ "$(node -p "Boolean(require('./vendors/default/vendor.json').sentry)")" != "true" ]; then
+            echo "The vendor has no sentry section: skipping the source map upload."
+            exit 0
+          fi
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "::warning::SENTRY_AUTH_TOKEN is not set, so this update has no source maps: skipping the source map upload."
+            exit 0
+          fi
+          # The update is already live, so a failed upload warns instead of turning the run red,
+          # which would invite a second, duplicate update.
+          if ! pnpm exec sentry-expo-upload-sourcemaps dist; then
+            echo "::warning::The source map upload failed, so crashes from this update will not be readable. Upload them again by hand."
+          fi

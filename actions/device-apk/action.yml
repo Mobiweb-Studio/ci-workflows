@@ -1,0 +1,99 @@
+name: Get the device-check APK
+description: >
+  Leaves one release APK of the reference vendor (the repository variable REFERENCE_VENDOR, or "default") at
+  `apk-path`. It computes the native fingerprint of a fresh checkout and looks for a cached APK with the same
+  fingerprint: on a hit it repacks that APK with this commit's JS (`@expo/repack-app`, about 30 seconds), on a miss
+  it builds one with build-android-apk and caches it under the fingerprint. The key also names the vendor, so a
+  different vendor or any native change is a miss (scripts/ci/device-apk-key.mjs, ADR 0017). Needs the checkout
+  done and no `android/` folder, because an existing native folder changes the fingerprint.
+inputs:
+  reference-vendor:
+    description: The vendor folder to build; empty means "default".
+    required: false
+    default: ""
+outputs:
+  apk-path:
+    description: Where the APK is.
+    value: ${{ steps.result.outputs.apk-path }}
+  source:
+    description: "`repacked` or `built`."
+    value: ${{ steps.result.outputs.source }}
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: 17
+    - run: pnpm install --frozen-lockfile
+      shell: bash
+    - name: Choose the reference vendor
+      shell: bash
+      env:
+        REFERENCE_VENDOR: ${{ inputs.reference-vendor }}
+      run: |
+        VENDOR="${REFERENCE_VENDOR:-default}"
+        echo "VENDOR=$VENDOR" >> "$GITHUB_ENV"
+        echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
+    - name: Compute the native fingerprint and the cache key
+      id: key
+      shell: bash
+      run: |
+        # The version is the one the installed Expo SDK uses.
+        npx --yes @expo/fingerprint@0.20.13 fingerprint:generate --platform android > "$RUNNER_TEMP/fingerprint.json"
+        echo "key=$(node "$GITHUB_ACTION_PATH/../../scripts/ci/device-apk-key.mjs" "$VENDOR" < "$RUNNER_TEMP/fingerprint.json")" >> "$GITHUB_OUTPUT"
+    - name: Look for a cached APK with this fingerprint
+      id: cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/source-apk/app-release.apk
+        key: ${{ steps.key.outputs.key }}
+    - name: Repack the cached APK with this commit's JS
+      if: ${{ steps.cache.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: |
+        # A keystore made for this run, so the repacked APK can be installed. Nothing here is secret.
+        KS="$RUNNER_TEMP/repack.keystore"
+        keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias repack \
+          -dname "CN=Device checks" -keyalg RSA -keysize 2048 -validity 1 -noprompt
+        BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+        mkdir -p "$RUNNER_TEMP/device-apk"
+        npx --yes @expo/repack-app@0.10.4 --platform android \
+          --source-app "$RUNNER_TEMP/source-apk/app-release.apk" \
+          --output "$RUNNER_TEMP/device-apk/app-release.apk" \
+          --ks "$KS" --ks-pass pass:android --ks-key-alias repack --ks-key-pass pass:android \
+          --android-build-tools-dir "$BUILD_TOOLS"
+    - name: Build the APK, none was cached for this fingerprint
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      uses: Mobiweb-Studio/ci-workflows/actions/build-android-apk@main
+      with:
+        reference-vendor: ${{ inputs.reference-vendor }}
+    - name: Keep the new APK for the next runs with this fingerprint
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/source-apk" "$RUNNER_TEMP/device-apk"
+        cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/source-apk/app-release.apk"
+        cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/device-apk/app-release.apk"
+    - name: Save the APK under the fingerprint
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/source-apk/app-release.apk
+        key: ${{ steps.key.outputs.key }}
+    - name: Say where the APK came from
+      id: result
+      shell: bash
+      env:
+        HIT: ${{ steps.cache.outputs.cache-hit }}
+        KEY: ${{ steps.key.outputs.key }}
+      run: |
+        SOURCE=$([ "$HIT" = "true" ] && echo repacked || echo built)
+        echo "apk-path=$RUNNER_TEMP/device-apk/app-release.apk" >> "$GITHUB_OUTPUT"
+        echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+        echo "The APK for the device checks was $SOURCE (cache key \`$KEY\`)." >> "$GITHUB_STEP_SUMMARY"

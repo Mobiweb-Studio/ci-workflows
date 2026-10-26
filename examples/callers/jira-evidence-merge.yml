@@ -1,0 +1,20 @@
+name: jira-evidence-merge
+
+# This workflow runs on the pull_request event only, never pull_request_target or workflow_run. The shared
+# workflow refuses any other event.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  jira-evidence-merge:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/jira-evidence-merge.yml@v1
+    with:
+      jira-evidence: ${{ vars.JIRA_EVIDENCE == 'true' }}
+      jira-base-url: ${{ vars.JIRA_BASE_URL }}
+      jira-email: ${{ vars.JIRA_EMAIL }}
+      jira-project-key: ${{ vars.JIRA_PROJECT_KEY }}

@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Keep this job id: the checks report as "ci / checks", "ci / commits" and so on, and the device gate waits for
+  # those names. Add them to the required checks of the main branch.
+  ci:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/ci.yml@v1
+    with:
+      require-ticket-key: ${{ vars.REQUIRE_TICKET_KEY == 'true' }}
+      jira-project-key: ${{ vars.JIRA_PROJECT_KEY }}

@@ -1,0 +1,363 @@
+name: device-checks
+
+# The two device checks, Maestro and the QA agent, in one workflow so they can share one APK. Which check runs
+# is decided by scripts/ci/device-check-mode.mjs (ADR 0014). A `gate` job waits for the checks of the earlier
+# stages (ADR 0018). Then one `apk` job gets the APK with the action device-apk: it repacks a cached build when
+# the native fingerprint matches, and builds one when it does not. Called from the project's own
+# `device-checks.yml`, whose job id is `device-checks`, so the checks report as `device-checks / changes`,
+# `device-checks / gate`, `device-checks / apk`, `device-checks / maestro-android`, `device-checks / qa-agent` and
+# `device-checks / jira-evidence`.
+#
+# Inputs
+#   runner            The runner label for every job. The emulator jobs need KVM and a large disk, so use a
+#                     runner that has both. Default: the Blacksmith label the boilerplate uses.
+#   reference-vendor  The vendor folder to build and test; empty means "default". Pass
+#                     `${{ vars.REFERENCE_VENDOR }}`.
+#   earlier-checks    The checks of the earlier stages the gate waits for, one per line. Default: the names the
+#                     shared `ci` and `docs-check` workflows report when their caller jobs are `ci` and
+#                     `docs-check`.
+#   jira-evidence     true to post the verdicts to the Jira ticket. Pass `${{ vars.JIRA_EVIDENCE == 'true' }}`.
+#   jira-base-url, jira-email, jira-project-key
+#                     The Jira site, the account's e-mail and the project key. Pass the repository variables
+#                     JIRA_BASE_URL, JIRA_EMAIL and JIRA_PROJECT_KEY.
+# Secrets, read from the project's environments that the jobs declare: CLAUDE_CODE_OAUTH_TOKEN from `qa-agent`,
+# JIRA_API_TOKEN from `jira-evidence`.
+# Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
+# Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json
+# and qa-notes.md, .maestro/flows, vendors/<vendor>/maestro, scripts/agent-qa/instructions.md.
+# Runs on the `pull_request` event only, never `pull_request_target` or `workflow_run`: it holds the Claude token,
+# and fork code must never reach it. Any other event fails the first job.
+# The caller owns the trigger (pull_request: opened, synchronize, reopened, ready_for_review, converted_to_draft,
+# labeled, unlabeled) and the concurrency group: only a push (`synchronize`) should replace a run in progress,
+# because a label or a draft toggle must not cancel a running device job, and the run that replaced it would skip
+# and leave the PR with no result.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: blacksmith-2vcpu-ubuntu-2404
+      reference-vendor:
+        type: string
+        default: ""
+      earlier-checks:
+        type: string
+        default: |
+          ci / commits
+          docs-check / docs-check
+          ci / secret-scan
+          ci / checks
+      jira-evidence:
+        type: boolean
+        default: false
+      jira-base-url:
+        type: string
+        default: ""
+      jira-email:
+        type: string
+        default: ""
+      jira-project-key:
+        type: string
+        default: ""
+
+jobs:
+  changes:
+    # Starts on every PR and decides which device jobs run. A job skipped by its condition counts as
+    # passing, so a skipped check never blocks a merge.
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run_maestro: ${{ steps.maestro.outputs.run }}
+      run_qa: ${{ steps.qa.outputs.run }}
+    steps:
+      - name: Require a pull_request event
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "This workflow runs on the pull_request event only, not $EVENT_NAME: it holds the Claude token and fork code must never reach it." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: maestro
+        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@main
+        with:
+          check: maestro
+          github-token: ${{ github.token }}
+      - id: qa
+        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@main
+        with:
+          check: qa
+          github-token: ${{ github.token }}
+
+  gate:
+    # Stage 3 starts only after the checks of stages 1 and 2 passed, even when the APK is cached (ADR 0018). The
+    # other checks are in other workflows, so this job waits by polling their check runs.
+    needs: changes
+    if: ${{ needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true' }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Wait for the checks of the earlier stages
+        uses: Mobiweb-Studio/ci-workflows/actions/wait-for-checks@main
+        with:
+          checks: ${{ inputs.earlier-checks }}
+          timeout-seconds: "900"
+          github-token: ${{ github.token }}
+
+  apk:
+    # Makes the one APK that both device jobs install. It holds no secret.
+    needs: [changes, gate]
+    if: ${{ needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true' }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - id: apk
+        uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
+        with:
+          reference-vendor: ${{ inputs.reference-vendor }}
+      - name: Keep the APK for the device jobs
+        uses: actions/upload-artifact@v7
+        with:
+          name: device-apk
+          path: ${{ steps.apk.outputs.apk-path }}
+          if-no-files-found: error
+          retention-days: 1
+          # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
+          overwrite: true
+
+  maestro-android:
+    needs: [changes, gate, apk]
+    # `!cancelled()` keeps this job running when the gate or the apk job failed, so that it fails below and is not
+    # skipped (a skipped job counts as passing).
+    if: ${{ !cancelled() && needs.changes.outputs.run_maestro == 'true' }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 45
+    env:
+      MAESTRO_VERSION: 2.10.0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Stop when an earlier stage did not pass
+        if: ${{ needs.gate.result != 'success' || needs.apk.result != 'success' }}
+        env:
+          GATE_RESULT: ${{ needs.gate.result }}
+          APK_RESULT: ${{ needs.apk.result }}
+        run: |
+          echo "Stopped before the device check: the gate job ended as ${GATE_RESULT} and the apk job as ${APK_RESULT}. See the gate job's log for the check that did not pass." >&2
+          exit 1
+      - uses: actions/download-artifact@v8
+        with:
+          name: device-apk
+          path: android/app/build/outputs/apk/release
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+        with:
+          reference-vendor: ${{ inputs.reference-vendor }}
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run the Maestro flows on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install android/app/build/outputs/apk/release/app-release.apk
+            bash "$CI_WORKFLOWS_DIR/scripts/ci/run-maestro.sh"
+      - name: Upload the Maestro report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maestro-android
+          path: |
+            maestro-report-*.xml
+            ~/.maestro/tests
+          if-no-files-found: warn
+          retention-days: 15
+          # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
+          overwrite: true
+
+  qa-agent:
+    needs: [changes, gate, apk]
+    # Only same-repository PRs get the Claude token; forks never do. `!cancelled()` as in maestro-android.
+    if: ${{ !cancelled() && needs.changes.outputs.run_qa == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 50
+    environment: qa-agent
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Stop when an earlier stage did not pass
+        if: ${{ needs.gate.result != 'success' || needs.apk.result != 'success' }}
+        env:
+          GATE_RESULT: ${{ needs.gate.result }}
+          APK_RESULT: ${{ needs.apk.result }}
+        run: |
+          echo "Stopped before the device check: the gate job ended as ${GATE_RESULT} and the apk job as ${APK_RESULT}. See the gate job's log for the check that did not pass." >&2
+          exit 1
+      - uses: actions/download-artifact@v8
+        with:
+          name: device-apk
+          path: android/app/build/outputs/apk/release
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+        with:
+          reference-vendor: ${{ inputs.reference-vendor }}
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install the QA tools
+        run: |
+          # pnpm 11 puts global binaries in $PNPM_HOME/bin, and refuses to install unless that is on the path.
+          export PNPM_HOME="$HOME/.local/share/pnpm"
+          mkdir -p "$PNPM_HOME/bin"
+          export PATH="$PNPM_HOME/bin:$PATH"
+          echo "$PNPM_HOME/bin" >> "$GITHUB_PATH"
+          # pnpm blocks install scripts by default; both tools need theirs to fetch a native binary.
+          pnpm add -g --allow-build=agent-device --allow-build=@anthropic-ai/claude-code agent-device@0.21.16 @anthropic-ai/claude-code@2.1.285
+      - name: Prepare the agent input
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          {
+            echo "<pull-request-title>"
+            echo "$PR_TITLE"
+            echo "</pull-request-title>"
+            echo "<diff>"
+            git diff "origin/$BASE_REF" HEAD -- . ':(exclude)pnpm-lock.yaml' | head -c 60000
+            echo "</diff>"
+          } > qa-input.txt
+      - name: Run the QA agent on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          # The token is only visible to this step, never to the build steps above.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+        with:
+          api-level: 34
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install android/app/build/outputs/apk/release/app-release.apk
+            mkdir -p qa-artifacts
+            bash "$CI_WORKFLOWS_DIR/scripts/agent-qa/run-agent.sh"
+      - name: Upload screenshots and agent output
+        id: upload
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-agent
+          path: |
+            qa-artifacts
+            qa-claude-output.json
+            qa-claude-error.log
+          if-no-files-found: warn
+          retention-days: 15
+          # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
+          overwrite: true
+      - name: Write the report
+        if: ${{ !cancelled() }}
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          HAS_ACK=false
+          if gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' | grep -qx qa-acknowledged; then
+            HAS_ACK=true
+          fi
+          export HAS_ACK
+          node "$CI_WORKFLOWS_DIR/scripts/agent-qa/report.mjs"
+      - name: Upload the structured report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-report
+          path: |
+            qa-report.json
+            qa-status.txt
+          if-no-files-found: warn
+          retention-days: 15
+          # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
+          overwrite: true
+      - name: Comment on the pull request
+        if: ${{ !cancelled() }}
+        # Found by its marker, so it never overwrites the device-check-mode comment.
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/upsert-pr-comment.sh" qa-agent-report "$PR_NUMBER" qa-comment.md
+      - name: Fail the check unless the QA agent passed
+        if: ${{ !cancelled() }}
+        run: test "$(cat qa-status.txt)" = pass
+
+  jira-evidence:
+    # Posts one comment with both verdicts to the ticket in the branch name (ADR 0019). Off until the repository
+    # sets the variable JIRA_EVIDENCE to true. Same-repository PRs only, as qa-agent, so forks never see the token.
+    # The poster turns every Jira failure into a warning and exits 0, so this job never turns a PR red.
+    needs: [changes, gate, apk, maestro-android, qa-agent]
+    if: ${{ !cancelled() && inputs.jira-evidence && (needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true') && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 10
+    environment: jira-evidence
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      # An artifact is missing when its check did not run, so a failed download is expected.
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: qa-agent
+          path: evidence/qa-agent
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: qa-report
+          path: evidence/qa-report
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: maestro-android
+          path: evidence/maestro-android
+      - name: Post the evidence to the Jira ticket
+        env:
+          JIRA_BASE_URL: ${{ inputs.jira-base-url }}
+          JIRA_EMAIL: ${{ inputs.jira-email }}
+          JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
+          # The token is only visible to this step.
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVIDENCE_DIR: evidence
+          MAESTRO_RESULT: ${{ needs.maestro-android.result }}
+          GATE_RESULT: ${{ needs.gate.result }}
+          APK_RESULT: ${{ needs.apk.result }}
+        run: node "$CI_WORKFLOWS_DIR/scripts/ci/jira-evidence.mjs" run

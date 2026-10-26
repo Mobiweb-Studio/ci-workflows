@@ -1,0 +1,16 @@
+name: docs-check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs-check:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/docs-check.yml@v1

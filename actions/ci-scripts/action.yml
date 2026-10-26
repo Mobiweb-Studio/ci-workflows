@@ -1,0 +1,13 @@
+name: CI scripts
+description: >
+  Exposes the directory the shared CI scripts live in, so a step of a shared workflow can run one of them.
+  A called workflow cannot read its own ref and its `./` paths resolve to the caller's checkout, but an action's
+  own path points into this repository at the ref the workflow pinned. The scripts therefore travel with the
+  actions. Sets CI_WORKFLOWS_DIR to the root of this repository's checkout for every later step of the job,
+  so a script is `$CI_WORKFLOWS_DIR/scripts/ci/<name>`.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: echo "CI_WORKFLOWS_DIR=$(cd "${{ github.action_path }}/../.." && pwd)" >> "$GITHUB_ENV"

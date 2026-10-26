@@ -1,0 +1,25 @@
+name: device-check-mode
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+      - labeled
+      - unlabeled
+      - edited
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: device-check-mode-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  device-check-mode:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/device-check-mode.yml@v1

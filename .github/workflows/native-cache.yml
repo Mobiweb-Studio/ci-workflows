@@ -1,0 +1,35 @@
+name: native-cache
+
+# Builds the release APK on main, or finds it when the native fingerprint is unchanged, to leave the cached APK
+# (keyed by the fingerprint) and the ccache and Gradle caches that pull requests can restore. GitHub lets a pull
+# request read only caches written by its base branch or by itself, so without this job the first run of every
+# pull request would build from scratch. Called from the project's own `native-cache.yml`, whose job id is
+# `native-cache`.
+#
+# Inputs
+#   runner            The runner label. Default: the Blacksmith label the boilerplate uses.
+#   reference-vendor  The vendor folder to build; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
+# Secrets: none.
+# Token permissions the caller job must grant: contents: read.
+# Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts and vendors/<vendor>/vendor.json.
+# The caller owns the trigger (push to main with the project's native paths, and workflow_dispatch) and the
+# concurrency group.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: blacksmith-2vcpu-ubuntu-2404
+      reference-vendor:
+        type: string
+        default: ""
+
+jobs:
+  seed:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
+        with:
+          reference-vendor: ${{ inputs.reference-vendor }}

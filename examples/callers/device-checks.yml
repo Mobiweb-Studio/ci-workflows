@@ -1,0 +1,35 @@
+name: device-checks
+
+# This workflow runs on the pull_request event only, never pull_request_target or workflow_run: it holds the Claude
+# token, and fork code must never reach it. The shared workflow refuses any other event.
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - converted_to_draft
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: device-checks-${{ github.ref }}
+  # Only a push replaces a run in progress. A label or a draft toggle must not cancel a running device
+  # job, because the run that replaced it would skip and leave the PR with no result.
+  cancel-in-progress: ${{ github.event.action == 'synchronize' }}
+
+jobs:
+  device-checks:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/device-checks.yml@v1
+    with:
+      reference-vendor: ${{ vars.REFERENCE_VENDOR }}
+      jira-evidence: ${{ vars.JIRA_EVIDENCE == 'true' }}
+      jira-base-url: ${{ vars.JIRA_BASE_URL }}
+      jira-email: ${{ vars.JIRA_EMAIL }}
+      jira-project-key: ${{ vars.JIRA_PROJECT_KEY }}

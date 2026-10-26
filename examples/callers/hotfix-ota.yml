@@ -1,0 +1,36 @@
+name: hotfix-ota
+
+# Start it by hand from the Actions tab. The shared workflow holds production credentials: pin this ref to an exact
+# tag (v1.2.3) when the project wants a human to review every change to it, and require reviewers on the
+# production-release environment.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: The branch (or the tag itself) that holds the fix, built on the live release tag
+        required: true
+      live_tag:
+        description: The release tag (v1.2.3) that is live in store production
+        required: true
+      android_build_id:
+        description: EAS build id of the Android build live in Google Play production
+        required: true
+      ios_build_id:
+        description: EAS build id of the iOS build live in the App Store
+        required: true
+      message:
+        description: What this update fixes
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  hotfix:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/hotfix-ota.yml@v1
+    with:
+      ref: ${{ inputs.ref }}
+      live-tag: ${{ inputs.live_tag }}
+      android-build-id: ${{ inputs.android_build_id }}
+      ios-build-id: ${{ inputs.ios_build_id }}
+      message: ${{ inputs.message }}

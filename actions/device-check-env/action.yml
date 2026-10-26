@@ -1,0 +1,28 @@
+name: Device check environment
+description: >
+  Leaves a device job in the state the Maestro and QA agent scripts need when the APK did not come from
+  build-android-apk: pnpm and Node installed, and APP_VARIANT and APP_ID exported for the reference vendor
+  (the repository variable REFERENCE_VENDOR, or "default"). The project's dependencies are not installed,
+  because neither run-maestro.sh nor the QA agent's scripts read them. The vendor lines match the ones in
+  build-android-apk, which also seeds the native caches and so stays self-contained.
+inputs:
+  reference-vendor:
+    description: The vendor folder under test; empty means "default".
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+    - name: Choose the reference vendor
+      shell: bash
+      env:
+        REFERENCE_VENDOR: ${{ inputs.reference-vendor }}
+      run: |
+        VENDOR="${REFERENCE_VENDOR:-default}"
+        echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
+        echo "APP_ID=$(node -p "require('./vendors/$VENDOR/vendor.json').identity.androidPackage")" >> "$GITHUB_ENV"

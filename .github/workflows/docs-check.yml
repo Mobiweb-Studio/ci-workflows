@@ -1,0 +1,34 @@
+name: docs-check
+
+# Fails a PR that changes feature code without changing its docs, unless the PR has the `no-docs` label. Called
+# from the project's own `docs-check.yml`, whose job id is `docs-check`, so the check reports as
+# `docs-check / docs-check`.
+#
+# Inputs
+#   runner  The runner label. Default: the Blacksmith label the boilerplate uses.
+# Secrets: none.
+# Token permissions the caller job must grant: contents: read.
+# Files read from the project: the git history of the PR and the layout the script checks (src/, docs/features/).
+# The caller owns the trigger (pull_request: opened, synchronize, reopened, labeled, unlabeled) and the
+# concurrency group.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: blacksmith-2vcpu-ubuntu-2404
+
+jobs:
+  docs-check:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Require docs for feature changes
+        env:
+          HAS_NO_DOCS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'no-docs') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/docs-check.sh" "$BASE_SHA" "$HEAD_SHA"

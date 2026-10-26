@@ -1,0 +1,68 @@
+name: Device check gate
+description: >
+  Reads the pull request's current state (draft, labels, base branch) and the files it changes, then asks
+  scripts/ci/device-check-mode.mjs whether a device check runs, or for the text of the mode comment. Used by
+  the device-checks and device-check-mode workflows. The caller checks out the repository with
+  full history first, and the token must be able to read the pull request.
+inputs:
+  command:
+    description: "decide: whether one check runs. comment: the text of the mode comment for both checks."
+    required: false
+    default: decide
+  check:
+    description: "maestro or qa. Only for the decide command."
+    required: false
+    default: ""
+  github-token:
+    description: A token that can read the pull request.
+    required: true
+outputs:
+  run:
+    description: "true when the check runs (decide)."
+    value: ${{ steps.gate.outputs.run }}
+  reason:
+    description: Why the check runs or is skipped (decide).
+    value: ${{ steps.gate.outputs.reason }}
+  base-ref:
+    description: The pull request's base branch, read now.
+    value: ${{ steps.gate.outputs.base-ref }}
+  comment-file:
+    description: The path of the mode comment text (comment).
+    value: ${{ steps.gate.outputs.comment-file }}
+
+runs:
+  using: composite
+  steps:
+    - id: gate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        COMMAND: ${{ inputs.command }}
+        CHECK: ${{ inputs.check }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        EVENT_ACTION: ${{ github.event.action }}
+        EVENT_LABEL: ${{ github.event.label.name }}
+        BASE_CHANGED: ${{ github.event.changes.base != null }}
+      run: |
+        set -euo pipefail
+        # The draft state, labels and base branch are read now and not taken from the event, because a
+        # re-run of an old run would carry the old event.
+        pr="$(gh pr view "$PR_NUMBER" --json isDraft,baseRefName,labels)"
+        BASE_REF="$(jq -r .baseRefName <<< "$pr")"
+        IS_DRAFT="$(jq -r .isDraft <<< "$pr")"
+        LABELS="$(jq -r '.labels[].name' <<< "$pr")"
+        # A failing diff stops the step: an empty list means "no app files changed" to the script.
+        git -c core.quotepath=off diff --name-only "origin/$BASE_REF" HEAD > "$RUNNER_TEMP/changed-files.txt"
+        CHANGED_FILES="$RUNNER_TEMP/changed-files.txt"
+        export BASE_REF IS_DRAFT LABELS CHANGED_FILES
+        echo "base-ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+        if [ "$COMMAND" = "decide" ]; then
+          node "$GITHUB_ACTION_PATH/../../scripts/ci/device-check-mode.mjs" decide | tee -a "$GITHUB_OUTPUT"
+        elif [ "$COMMAND" = "comment" ]; then
+          node "$GITHUB_ACTION_PATH/../../scripts/ci/device-check-mode.mjs" comment > "$RUNNER_TEMP/mode-comment.md"
+          echo "comment-file=$RUNNER_TEMP/mode-comment.md" >> "$GITHUB_OUTPUT"
+        else
+          echo "Unknown command: $COMMAND" >&2
+          exit 1
+        fi

@@ -1,0 +1,34 @@
+name: native-cache
+
+# Paths that change the native build. List the ones the project has; the shared actions and scripts are no longer
+# in this repository, so they are not listed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "app/**"
+      - "vendors/**"
+      - "app.config.ts"
+      - "metro.config.js"
+      - "babel.config.js"
+      - "index.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".nvmrc"
+      - ".github/workflows/native-cache.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-cache
+  cancel-in-progress: true
+
+jobs:
+  native-cache:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/native-cache.yml@v1
+    with:
+      reference-vendor: ${{ vars.REFERENCE_VENDOR }}

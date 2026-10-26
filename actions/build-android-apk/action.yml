@@ -1,0 +1,79 @@
+name: Build the Android release APK
+description: >
+  Restores the native build caches and builds the release APK of the reference vendor (the repository
+  variable REFERENCE_VENDOR, or "default"). Only the device-apk action calls it, on a cache miss, after it
+  installed pnpm, Node, Java and the project's dependencies, so this action does not repeat them (ADR 0018).
+  Written for GitHub's runners and now run on Blacksmith's (ADR 0017).
+inputs:
+  reference-vendor:
+    description: The vendor folder to build; empty means "default".
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Free disk space on the runner
+      # The build plus the emulator image do not fit on the runner's disk ("No space left on
+      # device" while installing the emulator). Remove preinstalled toolchains these jobs never
+      # use; the Android SDK, Java and Node stay.
+      shell: bash
+      run: |
+        df -h /
+        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost \
+          /usr/local/share/powershell /opt/hostedtoolcache/CodeQL /usr/local/julia* /usr/share/swift
+        sudo docker image prune --all --force > /dev/null || true
+        df -h /
+    - uses: gradle/actions/setup-gradle@v5
+    - name: Choose the reference vendor
+      # Every vendor builds through the same code; CI builds one of them.
+      shell: bash
+      env:
+        REFERENCE_VENDOR: ${{ inputs.reference-vendor }}
+      run: |
+        VENDOR="${REFERENCE_VENDOR:-default}"
+        echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
+        echo "APP_ID=$(node -p "require('./vendors/$VENDOR/vendor.json').identity.androidPackage")" >> "$GITHUB_ENV"
+    - name: Keep Sentry out of the device checks
+      # The APK is built with no APP_ENV, so a reference vendor with a Sentry DSN would report its test
+      # runs as production. It also has no upload token to give the Sentry plugin (ADR 0021).
+      shell: bash
+      run: |
+        echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
+        echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
+    - name: Set up ccache for the C++ build
+      # Gradle cannot cache React Native's C++ compilation, so ccache wraps the compiler through CMake.
+      # compiler_check=content is needed on CI, where file timestamps change on every checkout.
+      shell: bash
+      run: |
+        sudo apt-get install -y --no-install-recommends ccache
+        {
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          echo "CCACHE_COMPILERCHECK=content"
+          echo "CCACHE_DIR=$HOME/.cache/ccache"
+          echo "CCACHE_MAXSIZE=2G"
+        } >> "$GITHUB_ENV"
+    - uses: actions/cache@v6
+      with:
+        path: ~/.cache/ccache
+        # A new entry per run, restored from the nearest earlier one (the seeding job on main writes them too).
+        key: ccache-android-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-android-${{ hashFiles('pnpm-lock.yaml') }}-
+          ccache-android-
+    - name: Generate the Android project
+      shell: bash
+      run: pnpm exec expo prebuild --platform android --no-install
+    - name: Build the release APK
+      shell: bash
+      working-directory: android
+      # The emulator is x86_64, so skip compiling the other CPU architectures.
+      # Expo's gradle.properties allows 2 GiB of heap and 512 MiB of metaspace, which the build
+      # outgrew once expo-updates was added: Gradle ran out of metaspace in the lint step and then
+      # hung until the job timed out. The runner has 16 GB, so give the Gradle JVM more room.
+      run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64 "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+    - name: Show the ccache hit rate
+      if: always()
+      shell: bash
+      run: ccache -s || true
