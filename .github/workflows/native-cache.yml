@@ -30,6 +30,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@v1.0.0-rc.1
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
