@@ -16,9 +16,10 @@ name: release
 # Secrets
 #   RELEASE_PLEASE_TOKEN  Optional. A personal access token, so the release PR triggers the required checks.
 #                         The caller passes it by name; without it release-please uses the workflow's token.
-#   EXPO_TOKEN            Not passed by the caller. Read from the project's `production-release` environment,
-#                         which the `release` job declares. Limit that environment to main and release tags in
-#                         the repository settings.
+#   EXPO_TOKEN            The caller passes it by name from its repository secrets. The `release` job also
+#                         declares the `production-release` environment, whose required reviewers and branch rules
+#                         gate the run: limit it to main and release tags. An environment's own secrets do not
+#                         reach a called workflow.
 # Token permissions the caller job must grant: contents: write, pull-requests: write.
 # Files read from the project: the release-please configuration and manifest, .nvmrc, package.json,
 # pnpm-lock.yaml, eas.json and the vendors the production profile builds.
@@ -41,8 +42,7 @@ on:
     secrets:
       RELEASE_PLEASE_TOKEN:
         required: false
-      # Declared so the workflow can name it. The caller does not pass it: the `release` job declares the
-      # `production-release` environment, and that environment's secret is the one used.
+      # Passed by the caller from a repository secret.
       EXPO_TOKEN:
         required: false
 
@@ -86,7 +86,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
-            echo "EXPO_TOKEN is not set in the production-release environment. See docs/ai/first-release.md." >&2
+            echo "EXPO_TOKEN is not set. The caller passes it from a repository secret. See docs/ai/first-release.md." >&2
             exit 1
           fi
       - uses: actions/checkout@v7

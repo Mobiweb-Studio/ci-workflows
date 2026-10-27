@@ -17,3 +17,6 @@ jobs:
       enabled: ${{ vars.RELEASE_PLEASE_ENABLED == 'true' }}
     secrets:
       RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      # A repository secret, passed by name. The release job still declares the production-release environment, whose
+      # required reviewers and branch rules gate the run.
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

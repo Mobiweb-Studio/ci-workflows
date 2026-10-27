@@ -62,6 +62,14 @@ describe("the caller examples", () => {
       }
     });
 
+    it("passes every secret the shared workflow declares, from the caller's repository secrets", () => {
+      const secrets = Object.keys(shared.on.workflow_call.secrets ?? {});
+      expect(Object.keys(job.secrets ?? {}).sort()).toEqual(secrets.sort());
+      for (const [key, value] of Object.entries<string>(job.secrets ?? {})) {
+        expect(value).toBe(`\${{ secrets.${key} }}`);
+      }
+    });
+
     it("grants the token permissions the shared workflow asks for, so the run does not fail at startup", () => {
       const granted: Permissions = { ...example.permissions, ...job.permissions };
       expect(covers(granted, headerPermissions(sharedText))).toBe(true);

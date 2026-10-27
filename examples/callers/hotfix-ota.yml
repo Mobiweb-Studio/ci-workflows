@@ -34,3 +34,8 @@ jobs:
       android-build-id: ${{ inputs.android_build_id }}
       ios-build-id: ${{ inputs.ios_build_id }}
       message: ${{ inputs.message }}
+    # Repository secrets, passed by name. The job still declares the production-release environment, whose required
+    # reviewers and branch rules gate the run.
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
