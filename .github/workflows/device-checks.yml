@@ -23,10 +23,9 @@ name: device-checks
 #   jira-base-url, jira-email, jira-project-key
 #                     The Jira site, the account's e-mail and the project key. Pass the repository variables
 #                     JIRA_BASE_URL, JIRA_EMAIL and JIRA_PROJECT_KEY.
-# Secrets, read from the project's environments that the jobs declare: CLAUDE_CODE_OAUTH_TOKEN from `qa-agent`,
-# JIRA_API_TOKEN from `jira-evidence`.
-# Declared here so the workflow can name them. The caller does not pass them: the job declares the environment, and
-# that environment's secret, in the calling repository, is the one used (a shared workflow sees only the secrets it declares).
+# Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job) and
+# JIRA_API_TOKEN (the `jira-evidence` job). The jobs also declare the environments `qa-agent` and `jira-evidence`,
+# which gate them (reviewers, branch rules), but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json
 # and qa-notes.md, .maestro/flows, vendors/<vendor>/maestro, scripts/agent-qa/instructions.md.
