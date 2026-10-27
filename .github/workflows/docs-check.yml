@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.0.0-rc.5
       - name: Require docs for feature changes
         env:
           HAS_NO_DOCS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'no-docs') }}
