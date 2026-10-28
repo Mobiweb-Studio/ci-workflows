@@ -9,7 +9,7 @@ name: release
 # Inputs
 #   runner         The runner label for every job. Default: the Blacksmith label the boilerplate uses.
 #   enabled        true to run. Off until the owner opts in. Pass `${{ vars.RELEASE_PLEASE_ENABLED == 'true' }}`.
-#                  See docs/ai/docs-workflow.md before turning it on.
+#                  See docs/ai/lifecycle.md ("Changelog and releases") before turning it on.
 #   config-file, manifest-file
 #                  The release-please configuration and manifest. Defaults: release-please-config.json and
 #                  .release-please-manifest.json.
