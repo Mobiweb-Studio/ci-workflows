@@ -18,3 +18,5 @@ concurrency:
 jobs:
   human-review:
     uses: Mobiweb-Studio/ci-workflows/.github/workflows/human-review.yml@v1
+    with:
+      enabled: ${{ vars.HUMAN_REVIEW_ENABLED == 'true' }}

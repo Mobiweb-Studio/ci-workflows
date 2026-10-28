@@ -4,11 +4,14 @@ name: human-review
 # `needs-human-review` label was never applied; otherwise it needs an approving review of the head commit from a
 # person with write access, other than the author (scripts/ci/human-review.mjs).
 # Called from the project's own `human-review.yml`, whose job id is `human-review`, so the check reports as
-# `human-review / human-review`. A project turns it on only after its calibration is signed off, and adds the check to
-# the required checks of the main branch then.
+# `human-review / human-review`. A project turns it on only after its calibration is signed off: it sets the
+# repository variable HUMAN_REVIEW_ENABLED to true, and adds the check to the required checks of the main branch.
+# Until then the job is skipped.
 #
 # Inputs
 #   runner                Default: the Blacksmith label the boilerplate uses.
+#   enabled               true to run. Off until the project's calibration is signed off. Pass
+#                         `${{ vars.HUMAN_REVIEW_ENABLED == 'true' }}`.
 #   label                 The label an agent review applies when it finds a new pattern or a risk outside the paths.
 #                         Default: needs-human-review.
 #   marker                The name in the agent review comment's marker `<!-- NAME: HEAD_SHA -->`. Default: ce-code-review.
@@ -26,6 +29,9 @@ on:
       runner:
         type: string
         default: blacksmith-2vcpu-ubuntu-2404
+      enabled:
+        type: boolean
+        default: false
       label:
         type: string
         default: needs-human-review
@@ -38,6 +44,7 @@ on:
 
 jobs:
   human-review:
+    if: ${{ inputs.enabled }}
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/setup-node@v4
