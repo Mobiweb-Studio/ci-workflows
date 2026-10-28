@@ -39,9 +39,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.1.0
       - id: gate
-        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@main
+        uses: Mobiweb-Studio/ci-workflows/actions/device-check-gate@v1.1.0
         with:
           command: comment
           github-token: ${{ github.token }}
