@@ -23,6 +23,7 @@ The repository is public so that projects in other GitHub organisations can call
 |---|---|---|
 | `ci.yml` | `ci` | Commit messages, secret scan, types, lint, tests, layout, dead code, and the Jira ticket key when asked. |
 | `docs-check.yml` | `docs-check` | Requires docs for feature changes unless the PR has `no-docs`. |
+| `human-review.yml` | `human-review` | Needs a person's approval of the head commit unless an agent review of it exists and the `needs-human-review` label was never applied. Off until a project's calibration is signed off: set `HUMAN_REVIEW_ENABLED` to `true`. |
 | `device-check-mode.yml` | `device-check-mode` | Keeps one PR comment that says whether the two device checks run and why. |
 | `device-checks.yml` | `device-checks` | Maestro and the QA agent on one shared APK, then the Jira evidence. |
 | `native-cache.yml` | `native-cache` | Seeds the APK and build caches on main. |
