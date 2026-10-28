@@ -1,0 +1,20 @@
+name: human-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: human-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  human-review:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/human-review.yml@v1

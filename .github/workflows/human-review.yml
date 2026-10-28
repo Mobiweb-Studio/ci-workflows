@@ -1,0 +1,57 @@
+name: human-review
+
+# Passes a pull request without a person only when an agent review exists for its current head commit and the
+# `needs-human-review` label was never applied; otherwise it needs an approving review of the head commit from a
+# person with write access, other than the author (scripts/ci/human-review.mjs).
+# Called from the project's own `human-review.yml`, whose job id is `human-review`, so the check reports as
+# `human-review / human-review`. A project turns it on only after its calibration is signed off, and adds the check to
+# the required checks of the main branch then.
+#
+# Inputs
+#   runner                Default: the Blacksmith label the boilerplate uses.
+#   label                 The label an agent review applies when it finds a new pattern or a risk outside the paths.
+#                         Default: needs-human-review.
+#   marker                The name in the agent review comment's marker `<!-- NAME: HEAD_SHA -->`. Default: ce-code-review.
+#   approver-permissions  Comma-separated repository permissions that count as a person's approval.
+#                         Default: admin,maintain,write.
+# Secrets: none.
+# Token permissions the caller job must grant: contents: read, issues: read, pull-requests: read.
+# Files read from the project: none.
+# The caller owns the trigger (pull_request: opened, synchronize, reopened, labeled, unlabeled; pull_request_review:
+# submitted, dismissed) and the concurrency group. A comment does not start the check, so after the agent review
+# comment is posted, re-run this check.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: blacksmith-2vcpu-ubuntu-2404
+      label:
+        type: string
+        default: needs-human-review
+      marker:
+        type: string
+        default: ce-code-review
+      approver-permissions:
+        type: string
+        default: admin,maintain,write
+
+jobs:
+  human-review:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Require a person unless the agent review and the label allow otherwise
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          LABEL: ${{ inputs.label }}
+          MARKER: ${{ inputs.marker }}
+          APPROVER_PERMISSIONS: ${{ inputs.approver-permissions }}
+        run: node "$CI_WORKFLOWS_DIR/scripts/ci/human-review.mjs"
