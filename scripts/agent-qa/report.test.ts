@@ -177,6 +177,16 @@ describe("report.mjs", () => {
         "**Warning: the run passed the $0.50 cost ceiling.**",
       );
     });
+
+    it("takes the cost ceiling from the caller's budget", () => {
+      const output = JSON.parse(claudeOutput(passReport));
+      const { comment } = run(
+        JSON.stringify({ ...output, total_cost_usd: 0.75 }),
+        { QA_MAX_BUDGET_USD: "5" },
+      );
+      expect(comment).toContain("model cost $0.750 (ceiling $5.00).");
+      expect(comment).not.toContain("**Warning:");
+    });
   });
 
   describe("qa-report.json", () => {

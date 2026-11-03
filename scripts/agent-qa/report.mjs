@@ -4,7 +4,8 @@
 // Env: HAS_ACK ("true" when the PR has the qa-acknowledged label), ARTIFACT_URL, RUN_URL.
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
-const COST_CEILING_USD = 0.5;
+// The run's budget, which the caller sets with the qa-agent-max-budget-usd input.
+const COST_CEILING_USD = Number(process.env.QA_MAX_BUDGET_USD || 0.5);
 const STATUSES = ["pass", "product_issue", "inconclusive"];
 
 const acknowledged = process.env.HAS_ACK === "true";

@@ -29,4 +29,9 @@ describe("run-agent.sh", () => {
     expect(command).not.toContain("--plugin-dir");
     expect(command).not.toMatch(/--setting-sources\s+\S*(project|local)/);
   });
+
+  it("takes its limits from the caller, with 40 turns and $0.50 when unset", () => {
+    expect(command).toContain('--max-turns "${QA_MAX_TURNS:-40}"');
+    expect(command).toContain('--max-budget-usd "${QA_MAX_BUDGET_USD:-0.50}"');
+  });
 });

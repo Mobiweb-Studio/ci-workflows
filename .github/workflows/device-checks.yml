@@ -19,6 +19,9 @@ name: device-checks
 #   earlier-checks    The checks of the earlier stages the gate waits for, one per line. Default: the names the
 #                     shared `ci` and `docs-check` workflows report when their caller jobs are `ci` and
 #                     `docs-check`.
+#   qa-agent-max-turns, qa-agent-max-budget-usd
+#                     The QA agent's turn limit and model-cost limit in US dollars. Default: 40 and 0.5. The
+#                     report's cost ceiling follows the budget.
 #   jira-evidence     true to post the verdicts to the Jira ticket. Pass `${{ vars.JIRA_EVIDENCE == 'true' }}`.
 #   jira-base-url, jira-email, jira-project-key
 #                     The Jira site, the account's e-mail and the project key. Pass the repository variables
@@ -50,6 +53,12 @@ on:
       qa-agent:
         type: boolean
         default: true
+      qa-agent-max-turns:
+        type: number
+        default: 40
+      qa-agent-max-budget-usd:
+        type: number
+        default: 0.5
       earlier-checks:
         type: string
         default: |
@@ -274,6 +283,8 @@ jobs:
           # The token is only visible to this step, never to the build steps above.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+          QA_MAX_TURNS: ${{ inputs.qa-agent-max-turns }}
+          QA_MAX_BUDGET_USD: ${{ inputs.qa-agent-max-budget-usd }}
         with:
           api-level: 34
           arch: x86_64
@@ -301,6 +312,7 @@ jobs:
         env:
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          QA_MAX_BUDGET_USD: ${{ inputs.qa-agent-max-budget-usd }}
         run: |
           HAS_ACK=false
           if gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' | grep -qx qa-acknowledged; then
