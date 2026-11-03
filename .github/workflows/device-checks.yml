@@ -16,6 +16,8 @@ name: device-checks
 #   maestro, qa-agent true by default. A project that declined a device check (docs/modules in the boilerplate)
 #                     passes false, and that check never runs: its job is skipped and the shared APK is made
 #                     only for the other one.
+#   qa-agent-max-turns, qa-agent-max-budget-usd
+#                     The QA agent's turn limit and model cost ceiling in US dollars. Default: 40 turns and $0.50.
 #   earlier-checks    The checks of the earlier stages the gate waits for, one per line. Default: the names the
 #                     shared `ci` and `docs-check` workflows report when their caller jobs are `ci` and
 #                     `docs-check`.
@@ -50,6 +52,12 @@ on:
       qa-agent:
         type: boolean
         default: true
+      qa-agent-max-turns:
+        type: number
+        default: 40
+      qa-agent-max-budget-usd:
+        type: number
+        default: 0.5
       earlier-checks:
         type: string
         default: |
@@ -221,6 +229,8 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       GH_TOKEN: ${{ github.token }}
+      QA_MAX_TURNS: ${{ inputs.qa-agent-max-turns }}
+      QA_MAX_BUDGET_USD: ${{ inputs.qa-agent-max-budget-usd }}
     steps:
       - uses: actions/checkout@v7
         with:
