@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs Claude Code as the QA agent. It may only run `agent-device` commands, ignores the
-# repository's own Claude settings, and stops at 40 turns or $0.50 of model cost.
+# repository's own Claude settings, and stops at QA_MAX_TURNS turns (default 40) or QA_MAX_BUDGET_USD of model
+# cost (default 0.50).
 # Needs APP_VARIANT (the vendor under test) and APP_ID (its Android package).
 set -uo pipefail
 
@@ -13,8 +14,8 @@ set -uo pipefail
 
 claude -p \
   --model haiku \
-  --max-turns 40 \
-  --max-budget-usd 0.50 \
+  --max-turns "${QA_MAX_TURNS:-40}" \
+  --max-budget-usd "${QA_MAX_BUDGET_USD:-0.50}" \
   --output-format json \
   --no-session-persistence \
   --setting-sources user \
