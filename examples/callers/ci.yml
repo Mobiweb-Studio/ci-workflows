@@ -19,3 +19,6 @@ jobs:
     with:
       require-ticket-key: ${{ vars.REQUIRE_TICKET_KEY == 'true' }}
       jira-project-key: ${{ vars.JIRA_PROJECT_KEY }}
+    # A repository secret, passed by name. Only a project whose .npmrc reads private packages needs it.
+    secrets:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
