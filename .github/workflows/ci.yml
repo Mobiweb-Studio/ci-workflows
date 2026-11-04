@@ -14,10 +14,11 @@ name: ci
 #                       passes false for it, and that step is skipped. A step that is on and whose script is
 #                       missing fails, so a removed or misspelled script cannot make a check pass silently.
 # Secrets
-#   NPM_AUTH_TOKEN      Optional. The caller passes it by name from its repository secrets. The `commits` and
-#                       `checks` jobs set it in their environment for `pnpm install`, for a project whose .npmrc
-#                       reads private packages with `${NPM_AUTH_TOKEN}`. Without it the variable is empty and
-#                       nothing changes.
+#   NPM_AUTH_TOKEN      Optional. The caller passes it by name from its repository secrets. For a project with
+#                       private packages on GitHub Packages, the `commits` and `checks` jobs set it in their
+#                       environment and write `//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}` to ~/.npmrc
+#                       before `pnpm install`: pnpm does not expand the variable in a project .npmrc's credentials.
+#                       Without it the variable is empty and nothing changes.
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: .nvmrc, package.json with the scripts typecheck, lint, test, fsd, dead-code and
 # vendor-isolation (the last three unless their input is false), a commitlint config, pnpm-lock.yaml, and the
@@ -72,6 +73,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+      - name: Put the npm token's reference in the user-level .npmrc
+        # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line
+        # goes in ~/.npmrc, where it does. The single quotes write the reference, never the token.
+        if: ${{ env.NPM_AUTH_TOKEN != '' }}
+        run: |
+          # shellcheck disable=SC2016
+          echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
@@ -95,6 +103,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+      - name: Put the npm token's reference in the user-level .npmrc
+        # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line
+        # goes in ~/.npmrc, where it does. The single quotes write the reference, never the token.
+        if: ${{ env.NPM_AUTH_TOKEN != '' }}
+        run: |
+          # shellcheck disable=SC2016
+          echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
       - run: pnpm install --frozen-lockfile
       - name: Check the commit messages follow Conventional Commits
         run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }}

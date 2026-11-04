@@ -27,7 +27,8 @@ name: device-checks
 #                     JIRA_BASE_URL, JIRA_EMAIL and JIRA_PROJECT_KEY.
 # Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job),
 # JIRA_API_TOKEN (the `jira-evidence` job) and optionally NPM_AUTH_TOKEN (the `apk` job's `pnpm install`, for a project
-# whose .npmrc reads private packages with `${NPM_AUTH_TOKEN}`; without it the variable is empty and nothing changes). The jobs also declare the environments `qa-agent` and `jira-evidence`,
+# with private packages on GitHub Packages: the device-apk action writes its reference to ~/.npmrc; without it the
+# variable is empty and nothing changes). The jobs also declare the environments `qa-agent` and `jira-evidence`,
 # which gate them (reviewers, branch rules), but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json

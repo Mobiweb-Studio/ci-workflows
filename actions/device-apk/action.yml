@@ -30,6 +30,14 @@ runs:
       with:
         distribution: temurin
         java-version: 17
+    - name: Put the npm token's reference in the user-level .npmrc
+      # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line
+      # goes in ~/.npmrc, where it does. The single quotes write the reference, never the token.
+      if: ${{ env.NPM_AUTH_TOKEN != '' }}
+      shell: bash
+      run: |
+        # shellcheck disable=SC2016
+        echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
     - run: pnpm install --frozen-lockfile
       shell: bash
     - name: Choose the reference vendor
