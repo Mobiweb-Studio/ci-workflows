@@ -14,8 +14,8 @@ name: hotfix-ota
 #   message           What this update fixes.
 #   runner            Optional. The runner label. Default: the Blacksmith label the boilerplate uses.
 # Secrets, passed by the caller by name from its repository secrets: EXPO_TOKEN, optionally SENTRY_AUTH_TOKEN for the
-# source map upload, and optionally NPM_AUTH_TOKEN for `pnpm install`, for a project whose .npmrc reads private
-# packages with `${NPM_AUTH_TOKEN}` (without it the variable is empty and nothing changes). The job also declares the `production-release` environment, whose required reviewers and branch
+# source map upload, and optionally NPM_AUTH_TOKEN for `pnpm install`, for a project with private packages on GitHub
+# Packages: the job writes its reference to ~/.npmrc (without it the variable is empty and nothing changes). The job also declares the `production-release` environment, whose required reviewers and branch
 # rule gate the run (the rule limits which branch the caller can be started from; it does not check the ref input,
 # which the steps below validate). An environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read.
@@ -103,6 +103,13 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - name: Put the npm token's reference in the user-level .npmrc
+        # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line
+        # goes in ~/.npmrc, where it does. The single quotes write the reference, never the token.
+        if: ${{ env.NPM_AUTH_TOKEN != '' }}
+        run: |
+          # shellcheck disable=SC2016
+          echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test

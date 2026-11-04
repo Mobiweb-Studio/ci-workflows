@@ -20,9 +20,10 @@ name: release
 #                         declares the `production-release` environment, whose required reviewers and branch rules
 #                         gate the run: limit it to main and release tags. An environment's own secrets do not
 #                         reach a called workflow.
-#   NPM_AUTH_TOKEN        Optional. The caller passes it by name. The `release` job sets it in its environment for
-#                         `pnpm install`, for a project whose .npmrc reads private packages with `${NPM_AUTH_TOKEN}`.
-#                         Without it the variable is empty and nothing changes.
+#   NPM_AUTH_TOKEN        Optional. The caller passes it by name. For a project with private packages on GitHub
+#                         Packages, the `release` job sets it in its environment and writes its reference to
+#                         ~/.npmrc before `pnpm install`. Without it the variable is empty and nothing changes.
+#                         `eas build` installs again on EAS, which needs its own NPM_AUTH_TOKEN secret.
 # Token permissions the caller job must grant: contents: write, pull-requests: write.
 # Files read from the project: the release-please configuration and manifest, .nvmrc, package.json,
 # pnpm-lock.yaml, eas.json and the vendors the production profile builds.
@@ -104,6 +105,13 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - name: Put the npm token's reference in the user-level .npmrc
+        # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line
+        # goes in ~/.npmrc, where it does. The single quotes write the reference, never the token.
+        if: ${{ env.NPM_AUTH_TOKEN != '' }}
+        run: |
+          # shellcheck disable=SC2016
+          echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
       - run: pnpm install --frozen-lockfile
       # The token is only set from here on, so the install above never sees it.
       - uses: expo/expo-github-action@v9
