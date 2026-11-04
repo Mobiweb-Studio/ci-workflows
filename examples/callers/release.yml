@@ -20,3 +20,4 @@ jobs:
       # A repository secret, passed by name. The release job still declares the production-release environment, whose
       # required reviewers and branch rules gate the run.
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}

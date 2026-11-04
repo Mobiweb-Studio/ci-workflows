@@ -32,3 +32,6 @@ jobs:
     uses: Mobiweb-Studio/ci-workflows/.github/workflows/native-cache.yml@v1
     with:
       reference-vendor: ${{ vars.REFERENCE_VENDOR }}
+    # A repository secret, passed by name. Only a project whose .npmrc reads private packages needs it.
+    secrets:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}

@@ -20,6 +20,9 @@ name: release
 #                         declares the `production-release` environment, whose required reviewers and branch rules
 #                         gate the run: limit it to main and release tags. An environment's own secrets do not
 #                         reach a called workflow.
+#   NPM_AUTH_TOKEN        Optional. The caller passes it by name. The `release` job sets it in its environment for
+#                         `pnpm install`, for a project whose .npmrc reads private packages with `${NPM_AUTH_TOKEN}`.
+#                         Without it the variable is empty and nothing changes.
 # Token permissions the caller job must grant: contents: write, pull-requests: write.
 # Files read from the project: the release-please configuration and manifest, .nvmrc, package.json,
 # pnpm-lock.yaml, eas.json and the vendors the production profile builds.
@@ -44,6 +47,8 @@ on:
         required: false
       # Passed by the caller from a repository secret.
       EXPO_TOKEN:
+        required: false
+      NPM_AUTH_TOKEN:
         required: false
 
 jobs:
@@ -80,6 +85,8 @@ jobs:
     # The caller grants write access for release-please; this job only reads the repository.
     permissions:
       contents: read
+    env:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - name: Require the Expo token
         env:

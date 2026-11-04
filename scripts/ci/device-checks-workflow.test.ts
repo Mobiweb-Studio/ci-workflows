@@ -136,10 +136,10 @@ describe("device-checks.yml", () => {
     expect(blocks.apk).not.toContain("!cancelled()");
   });
 
-  it("makes the one APK with the device-apk action and holds no secret", () => {
+  it("makes the one APK with the device-apk action and holds no secret but the optional npm token", () => {
     expect(blocks.apk).toContain("ci-workflows/actions/device-apk@");
     expect(blocks.apk).toContain("name: device-apk\n");
-    expect(blocks.apk).not.toMatch(/secrets\./);
+    expect(blocks.apk.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
     expect(blocks.apk).not.toMatch(/^ {4}environment:/m);
   });
 

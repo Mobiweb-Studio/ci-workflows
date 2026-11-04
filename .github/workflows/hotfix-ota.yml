@@ -13,8 +13,9 @@ name: hotfix-ota
 #   ios-build-id      EAS build id of the iOS build live in the App Store.
 #   message           What this update fixes.
 #   runner            Optional. The runner label. Default: the Blacksmith label the boilerplate uses.
-# Secrets, passed by the caller by name from its repository secrets: EXPO_TOKEN, and optionally SENTRY_AUTH_TOKEN for the
-# source map upload. The job also declares the `production-release` environment, whose required reviewers and branch
+# Secrets, passed by the caller by name from its repository secrets: EXPO_TOKEN, optionally SENTRY_AUTH_TOKEN for the
+# source map upload, and optionally NPM_AUTH_TOKEN for `pnpm install`, for a project whose .npmrc reads private
+# packages with `${NPM_AUTH_TOKEN}` (without it the variable is empty and nothing changes). The job also declares the `production-release` environment, whose required reviewers and branch
 # rule gate the run (the rule limits which branch the caller can be started from; it does not check the ref input,
 # which the steps below validate). An environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read.
@@ -48,6 +49,8 @@ on:
         required: false
       SENTRY_AUTH_TOKEN:
         required: false
+      NPM_AUTH_TOKEN:
+        required: false
 
 jobs:
   hotfix:
@@ -59,6 +62,8 @@ jobs:
     concurrency:
       group: hotfix-ota
       cancel-in-progress: false
+    env:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - name: Require the Expo token
         env:

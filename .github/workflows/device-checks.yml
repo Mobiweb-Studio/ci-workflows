@@ -25,8 +25,9 @@ name: device-checks
 #   jira-base-url, jira-email, jira-project-key
 #                     The Jira site, the account's e-mail and the project key. Pass the repository variables
 #                     JIRA_BASE_URL, JIRA_EMAIL and JIRA_PROJECT_KEY.
-# Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job) and
-# JIRA_API_TOKEN (the `jira-evidence` job). The jobs also declare the environments `qa-agent` and `jira-evidence`,
+# Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job),
+# JIRA_API_TOKEN (the `jira-evidence` job) and optionally NPM_AUTH_TOKEN (the `apk` job's `pnpm install`, for a project
+# whose .npmrc reads private packages with `${NPM_AUTH_TOKEN}`; without it the variable is empty and nothing changes). The jobs also declare the environments `qa-agent` and `jira-evidence`,
 # which gate them (reviewers, branch rules), but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json
@@ -81,6 +82,8 @@ on:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: false
       JIRA_API_TOKEN:
+        required: false
+      NPM_AUTH_TOKEN:
         required: false
 
 jobs:
@@ -137,11 +140,14 @@ jobs:
           github-token: ${{ github.token }}
 
   apk:
-    # Makes the one APK that both device jobs install. It holds no secret.
+    # Makes the one APK that both device jobs install. It holds no secret but the optional npm token, which the
+    # device-apk action's `pnpm install` reads from the job's env: a composite action cannot read secrets.
     needs: [changes, gate]
     if: ${{ needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 45
+    env:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - id: apk

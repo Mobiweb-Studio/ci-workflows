@@ -9,7 +9,10 @@ name: native-cache
 # Inputs
 #   runner            The runner label. Default: the Blacksmith label the boilerplate uses.
 #   reference-vendor  The vendor folder to build; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
-# Secrets: none.
+# Secrets
+#   NPM_AUTH_TOKEN    Optional. The caller passes it by name from its repository secrets. The `seed` job sets it in
+#                     its environment for `pnpm install`, for a project whose .npmrc reads private packages with
+#                     `${NPM_AUTH_TOKEN}`. Without it the variable is empty and nothing changes.
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts and vendors/<vendor>/vendor.json.
 # The caller owns the trigger (push to main with the project's native paths, and workflow_dispatch) and the
@@ -23,11 +26,17 @@ on:
       reference-vendor:
         type: string
         default: ""
+    secrets:
+      NPM_AUTH_TOKEN:
+        required: false
 
 jobs:
   seed:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 45
+    # The device-apk action is composite: it cannot read secrets, but its `pnpm install` inherits the job's env.
+    env:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
