@@ -1,0 +1,99 @@
+name: ios-regression
+
+# The weekly iOS regression: on main, every Maestro flow, tagged `ios` or not, on each iOS simulator runtime asked
+# for, one runtime at a time. A flow tagged `ios` that fails is a regression and fails its runtime's job; an untagged
+# flow that passes is named in the run's summary as one that can be tagged. Each runtime's reports and screenshots
+# are kept as the artifact `ios-regression-<runtime>`. The app is the one device-checks' maestro-ios uses: repacked
+# from the cache native-cache seeds on main, or built. Called from the project's own `ios-regression.yml`, whose job
+# id is `ios-regression`, so each runtime reports as `ios-regression / regression (<runtime>)`.
+#
+# Inputs
+#   ios-runner        The iOS runner, as in device-checks (a JSON array of labels or one hosted label). Empty skips
+#                     the job, so a project without one can keep the caller.
+#   reference-vendor  The vendor folder to test; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
+#   runtimes          A JSON array of iOS versions, such as '["27.1","26.4"]', each installed on the runner;
+#                     "newest" is the newest one installed. Default: '["newest"]'. A version the runner lacks fails
+#                     its job with the list of what is installed.
+# It takes no secret.
+# Token permissions the caller job must grant: contents: read.
+# Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json,
+# .maestro/flows and vendors/<vendor>/maestro.
+# Runs on the `schedule` and `workflow_dispatch` events only, so the code it runs on the iOS runner is a branch of
+# the project's own, never a pull request's. Any other event fails the job. The caller owns the trigger (a weekly
+# cron and workflow_dispatch) and the concurrency group.
+on:
+  workflow_call:
+    inputs:
+      ios-runner:
+        type: string
+        default: ""
+      reference-vendor:
+        type: string
+        default: ""
+      runtimes:
+        type: string
+        default: '["newest"]'
+
+jobs:
+  regression:
+    if: ${{ inputs.ios-runner != '' }}
+    runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # One runner takes one job at a time; the matrix only lines the runtimes up.
+      max-parallel: 1
+      matrix:
+        runtime: ${{ fromJSON(inputs.runtimes) }}
+    env:
+      MAESTRO_VERSION: 2.10.0
+      MAESTRO_PLATFORM: ios
+      MAESTRO_ALL_FLOWS: "true"
+      IOS_RUNTIME: ${{ matrix.runtime }}
+    steps:
+      - name: Require a schedule or workflow_dispatch event
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "schedule" ] && [ "$EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "This workflow runs on schedule and workflow_dispatch only, not $EVENT_NAME: pull request code must not reach the iOS runner this way." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+        with:
+          reference-vendor: ${{ inputs.reference-vendor }}
+          platform: ios
+      - id: app
+        uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main
+      - name: Create a simulator on iOS ${{ matrix.runtime }} and install the app
+        env:
+          APP_PATH: ${{ steps.app.outputs.app-path }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/ios-simulator.sh" create "$APP_PATH"
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run every Maestro flow on the simulator
+        # Untagged flows are expected to fail on iOS; the next step decides what fails the job.
+        continue-on-error: true
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/run-maestro.sh"
+      - name: Sum up the regressions and the flows that can be tagged
+        run: node "$CI_WORKFLOWS_DIR/scripts/ci/ios-regression-summary.mjs"
+      - name: Upload the Maestro reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-regression-${{ matrix.runtime }}
+          path: |
+            maestro-report-*.xml
+            ~/.maestro/tests
+          if-no-files-found: warn
+          retention-days: 15
+          overwrite: true
+      - name: Delete the simulator
+        if: always()
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/ios-simulator.sh" delete

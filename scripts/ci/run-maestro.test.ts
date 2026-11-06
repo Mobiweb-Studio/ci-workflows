@@ -78,6 +78,14 @@ describe("run-maestro.sh", () => {
     expect(stdout).toContain("Not tagged ios, skipped: .maestro/flows/untagged.yml");
   });
 
+  it("runs every flow on iOS, tagged or not, with MAESTRO_ALL_FLOWS=true", () => {
+    flow("tagged", "tags: [ios]\n");
+    flow("untagged", "");
+    const { status, calls } = run({ MAESTRO_PLATFORM: "ios", IOS_UDID: "UDID-1", MAESTRO_ALL_FLOWS: "true" });
+    expect(status).toBe(0);
+    expect(maestroFlows(calls)).toEqual(["tagged", "untagged"]);
+  });
+
   it("warns when no flow is tagged ios, and passes", () => {
     flow("android-only", "");
     const { status, stdout, calls } = run({ MAESTRO_PLATFORM: "ios", IOS_UDID: "UDID-1" });
