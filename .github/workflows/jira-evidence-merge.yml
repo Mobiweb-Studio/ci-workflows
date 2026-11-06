@@ -6,7 +6,8 @@ name: jira-evidence-merge
 # project's own `jira-evidence-merge.yml`, whose job id is `jira-evidence-merge`.
 #
 # Inputs
-#   runner            The runner label. Default: the Blacksmith label the boilerplate uses.
+#   runner            The runner label. Default: ubuntu-latest, a GitHub-hosted
+#                     runner: the job only reads, waits or comments, so it costs no Blacksmith minutes.
 #   jira-evidence     true to post. Pass `${{ vars.JIRA_EVIDENCE == 'true' }}`.
 #   jira-base-url, jira-email, jira-project-key
 #                     The Jira site, the account's e-mail and the project key. Pass the repository variables
@@ -23,7 +24,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
       jira-evidence:
         type: boolean
         default: false

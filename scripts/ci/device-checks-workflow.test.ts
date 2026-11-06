@@ -50,11 +50,14 @@ describe("device-checks.yml", () => {
     expect(workflow).not.toContain("concurrency:");
   });
 
-  it("takes the runner as an input and hard-codes none", () => {
+  it("takes the runners as inputs and hard-codes none: the device jobs on runner, the light ones on light-runner", () => {
+    const light = ["changes", "gate", "ios-app-link", "jira-evidence"];
     for (const [name, text] of Object.entries(blocks)) {
       if (name === "maestro-ios") continue;
-      expect(text).toMatch(/^ {4}runs-on: \$\{\{ inputs\.runner \}\}$/m);
+      const input = light.includes(name) ? "light-runner" : "runner";
+      expect(text).toMatch(new RegExp(`^ {4}runs-on: \\$\\{\\{ inputs\\.${input} \\}\\}$`, "m"));
     }
+    expect(workflow).toMatch(/light-runner:\n {8}type: string\n {8}default: ubuntu-latest\n/);
     expect(workflow).toMatch(
       /runner:\n {8}type: string\n {8}default: blacksmith-[a-z0-9-]+\n/,
     );
@@ -275,10 +278,10 @@ describe("device-checks.yml", () => {
   describe("ios-app-link", () => {
     const text = blocks["ios-app-link"];
 
-    it("comments the simulator app's link from the main runner, never from the iOS one", () => {
+    it("comments the simulator app's link from the light runner, never from the iOS one", () => {
       expect(text).toMatch(/^ {4}needs: maestro-ios$/m);
       expect(text).toContain("if: ${{ !cancelled() && needs.maestro-ios.outputs.app-url != '' }}");
-      expect(text).toMatch(/^ {4}runs-on: \$\{\{ inputs\.runner \}\}$/m);
+      expect(text).toMatch(/^ {4}runs-on: \$\{\{ inputs\.light-runner \}\}$/m);
       expect(blocks["maestro-ios"]).not.toContain("pull-requests: write");
       expect(blocks["maestro-ios"]).not.toContain("github.token");
     });

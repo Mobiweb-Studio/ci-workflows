@@ -5,7 +5,8 @@ name: docs-check
 # `docs-check / docs-check`.
 #
 # Inputs
-#   runner  The runner label. Default: the Blacksmith label the boilerplate uses.
+#   runner  The runner label. Default: ubuntu-latest, a GitHub-hosted
+#                     runner: the job only reads, waits or comments, so it costs no Blacksmith minutes.
 # Secrets: none.
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: the git history of the PR and the layout the script checks (src/, docs/features/).
@@ -16,7 +17,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
 
 jobs:
   docs-check:

@@ -9,7 +9,8 @@ name: human-review
 # Until then the job is skipped.
 #
 # Inputs
-#   runner                Default: the Blacksmith label the boilerplate uses.
+#   runner                Default: ubuntu-latest, a GitHub-hosted
+#                     runner: the job only reads, waits or comments, so it costs no Blacksmith minutes.
 #   enabled               true to run. Off until the project's calibration is signed off. Pass
 #                         `${{ vars.HUMAN_REVIEW_ENABLED == 'true' }}`.
 #   label                 The label an agent review applies when it finds a new pattern or a risk outside the paths.
@@ -28,7 +29,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
       enabled:
         type: boolean
         default: false
