@@ -5,12 +5,17 @@ name: device-checks
 # stages (ADR 0018). Then one `apk` job gets the APK with the action device-apk: it repacks a cached build when
 # the native fingerprint matches, and builds one when it does not. Called from the project's own
 # `device-checks.yml`, whose job id is `device-checks`, so the checks report as `device-checks / changes`,
-# `device-checks / gate`, `device-checks / apk`, `device-checks / maestro-android`, `device-checks / qa-agent` and
-# `device-checks / jira-evidence`.
+# `device-checks / gate`, `device-checks / apk`, `device-checks / maestro-android`, `device-checks / maestro-ios`,
+# `device-checks / qa-agent` and `device-checks / jira-evidence`.
 #
 # Inputs
-#   runner            The runner label for every job. The emulator jobs need KVM and a large disk, so use a
-#                     runner that has both. Default: the Blacksmith label the boilerplate uses.
+#   runner            The runner label for every job but maestro-ios. The emulator jobs need KVM and a large disk,
+#                     so use a runner that has both. Default: the Blacksmith label the boilerplate uses.
+#   ios-runner        The runner for maestro-ios, which builds the app for the iOS simulator and runs the flows
+#                     tagged `ios` there: a JSON array of labels, such as '["self-hosted","macOS","ARM64","ios"]',
+#                     or one hosted label, such as macos-15. The runner needs Xcode, CocoaPods and Java 17, and a
+#                     GUI session for the simulator (ADR 0014 in ICligo). Empty, the default, skips the job.
+#                     The job gets no secret, so it cannot install private packages.
 #   reference-vendor  The vendor folder to build and test; empty means "default". Pass
 #                     `${{ vars.REFERENCE_VENDOR }}`.
 #   maestro, qa-agent true by default. A project that declined a device check (docs/modules in the boilerplate)
@@ -45,6 +50,9 @@ on:
       runner:
         type: string
         default: blacksmith-2vcpu-ubuntu-2404
+      ios-runner:
+        type: string
+        default: ""
       reference-vendor:
         type: string
         default: ""
@@ -222,6 +230,72 @@ jobs:
           retention-days: 15
           # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
           overwrite: true
+
+  maestro-ios:
+    needs: [changes, gate]
+    # Runs only when the caller names an iOS runner, and only for PRs from this repository: the runner can be a
+    # shared self-hosted Mac, and fork code must never reach it. `!cancelled()` as in maestro-android.
+    if: ${{ !cancelled() && inputs.ios-runner != '' && needs.changes.outputs.run_maestro == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}
+    timeout-minutes: 60
+    env:
+      MAESTRO_VERSION: 2.10.0
+      MAESTRO_PLATFORM: ios
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Stop when an earlier stage did not pass
+        if: ${{ needs.gate.result != 'success' }}
+        env:
+          GATE_RESULT: ${{ needs.gate.result }}
+        run: |
+          echo "Stopped before the device check: the gate job ended as ${GATE_RESULT}. See the gate job's log for the check that did not pass." >&2
+          exit 1
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+        with:
+          reference-vendor: ${{ inputs.reference-vendor }}
+          platform: ios
+      - id: app
+        uses: Mobiweb-Studio/ci-workflows/actions/build-ios-simulator-app@main
+      - name: Create a simulator for this job and install the app
+        env:
+          APP_PATH: ${{ steps.app.outputs.app-path }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/ios-simulator.sh" create "$APP_PATH"
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run the Maestro flows tagged ios on the simulator
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/run-maestro.sh"
+      - name: Upload the Maestro report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maestro-ios
+          path: |
+            maestro-report-*.xml
+            ~/.maestro/tests
+          if-no-files-found: warn
+          retention-days: 15
+          # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
+          overwrite: true
+      - name: Zip the simulator app
+        if: ${{ !cancelled() && steps.app.outputs.app-path != '' }}
+        env:
+          APP_PATH: ${{ steps.app.outputs.app-path }}
+        run: ditto -c -k --keepParent "$APP_PATH" ios-simulator-app.zip
+      - name: Keep the simulator app, to try the PR in a Mac's Simulator
+        if: ${{ !cancelled() && steps.app.outputs.app-path != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-simulator-app
+          path: ios-simulator-app.zip
+          if-no-files-found: warn
+          retention-days: 7
+          overwrite: true
+      - name: Delete the simulator
+        if: always()
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/ios-simulator.sh" delete
 
   qa-agent:
     needs: [changes, gate, apk]

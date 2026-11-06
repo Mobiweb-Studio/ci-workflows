@@ -25,13 +25,15 @@ The repository is public so that projects in other GitHub organisations can call
 | `docs-check.yml` | `docs-check` | Requires docs for feature changes unless the PR has `no-docs`. |
 | `human-review.yml` | `human-review` | Needs a person's approval of the head commit unless an agent review of it exists and the `needs-human-review` label was never applied. Off until a project's calibration is signed off: set `HUMAN_REVIEW_ENABLED` to `true`. |
 | `device-check-mode.yml` | `device-check-mode` | Keeps one PR comment that says whether the two device checks run and why. |
-| `device-checks.yml` | `device-checks` | Maestro and the QA agent on one shared APK, then the Jira evidence. |
+| `device-checks.yml` | `device-checks` | Maestro and the QA agent on one shared APK, Maestro on an iOS simulator when asked, then the Jira evidence. |
 | `native-cache.yml` | `native-cache` | Seeds the APK and build caches on main. |
 | `jira-evidence-merge.yml` | `jira-evidence-merge` | Attaches the last device-check screenshots to the Jira ticket when the PR merges. |
 | `release.yml` | `release` | release-please, then the store build and submit when a release PR merges. |
 | `hotfix-ota.yml` | `hotfix` | A JS-only production update, started by hand. |
 
 `ci` takes `fsd`, `dead-code` and `vendor-isolation`, true by default, for a project that declined that module; a step that is on and whose script is missing fails. `device-checks` also takes `maestro` and `qa-agent`, both true by default, so a project that declined a device check passes false and that check never runs. It also takes `qa-agent-max-turns` and `qa-agent-max-budget-usd`, 40 and 0.50 by default, for a project that gives the QA agent more room. Every workflow takes a `runner` input that defaults to the Blacksmith label the boilerplate uses. A project without Blacksmith passes its own label; the emulator jobs need KVM and a large disk.
+
+`device-checks` also takes `ios-runner`, empty by default. When a project names a runner there (a JSON array of labels for a self-hosted Mac, such as `'["self-hosted","macOS","ARM64","ios"]'`, or a hosted label such as `macos-15`), the `maestro-ios` job builds the app for the iOS simulator on it, runs the flows whose config has the tag `ios` on a simulator made for the job, and keeps the zipped simulator app as the artifact `ios-simulator-app` for 7 days, so a reviewer with a Mac can open the PR in the Simulator. The runner needs Xcode, CocoaPods and Java 17, and a GUI session for the simulator. The job gets no secret and runs only for PRs from the same repository, so it cannot install private packages. The caller example passes the repository variable `IOS_RUNNER`.
 
 ### What a project provides
 

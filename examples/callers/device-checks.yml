@@ -29,6 +29,8 @@ jobs:
     uses: Mobiweb-Studio/ci-workflows/.github/workflows/device-checks.yml@v1
     with:
       reference-vendor: ${{ vars.REFERENCE_VENDOR }}
+      # Empty skips maestro-ios. For a self-hosted Mac: '["self-hosted","macOS","ARM64","ios"]'.
+      ios-runner: ${{ vars.IOS_RUNNER }}
       jira-evidence: ${{ vars.JIRA_EVIDENCE == 'true' }}
       jira-base-url: ${{ vars.JIRA_BASE_URL }}
       jira-email: ${{ vars.JIRA_EMAIL }}

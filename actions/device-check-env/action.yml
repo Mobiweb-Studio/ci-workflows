@@ -4,12 +4,17 @@ description: >
   build-android-apk: pnpm and Node installed, and APP_VARIANT and APP_ID exported for the reference vendor
   (the repository variable REFERENCE_VENDOR, or "default"). The project's dependencies are not installed,
   because neither run-maestro.sh nor the QA agent's scripts read them. The vendor lines match the ones in
-  build-android-apk, which also seeds the native caches and so stays self-contained.
+  build-android-apk, which also seeds the native caches and so stays self-contained. With platform `ios`, APP_ID is
+  the vendor's iOS bundle id instead of its Android package.
 inputs:
   reference-vendor:
     description: The vendor folder under test; empty means "default".
     required: false
     default: ""
+  platform:
+    description: android or ios; chooses which of the vendor's ids APP_ID gets.
+    required: false
+    default: android
 
 runs:
   using: composite
@@ -22,7 +27,13 @@ runs:
       shell: bash
       env:
         REFERENCE_VENDOR: ${{ inputs.reference-vendor }}
+        PLATFORM: ${{ inputs.platform }}
       run: |
         VENDOR="${REFERENCE_VENDOR:-default}"
+        case "$PLATFORM" in
+          android) ID_FIELD=androidPackage ;;
+          ios) ID_FIELD=iosBundleId ;;
+          *) echo "Unknown platform \"$PLATFORM\": use android or ios." >&2; exit 1 ;;
+        esac
         echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
-        echo "APP_ID=$(node -p "require('./vendors/$VENDOR/vendor.json').identity.androidPackage")" >> "$GITHUB_ENV"
+        echo "APP_ID=$(node -p "require('./vendors/$VENDOR/vendor.json').identity.$ID_FIELD")" >> "$GITHUB_ENV"

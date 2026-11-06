@@ -18,12 +18,13 @@ describe("device-checks.yml", () => {
     }
   });
 
-  it("has the six jobs, with the check names unchanged and jira-evidence last", () => {
+  it("has the seven jobs, with the check names unchanged and jira-evidence last", () => {
     expect(Object.keys(blocks)).toEqual([
       "changes",
       "gate",
       "apk",
       "maestro-android",
+      "maestro-ios",
       "qa-agent",
       "jira-evidence",
     ]);
@@ -49,7 +50,8 @@ describe("device-checks.yml", () => {
   });
 
   it("takes the runner as an input and hard-codes none", () => {
-    for (const text of Object.values(blocks)) {
+    for (const [name, text] of Object.entries(blocks)) {
+      if (name === "maestro-ios") continue;
       expect(text).toMatch(/^ {4}runs-on: \$\{\{ inputs\.runner \}\}$/m);
     }
     expect(workflow).toMatch(
@@ -201,7 +203,7 @@ describe("device-checks.yml", () => {
 
   it("uses one major of upload-artifact", () => {
     const versions = workflow.match(/actions\/upload-artifact@v\d+/g) ?? [];
-    expect(versions).toHaveLength(4);
+    expect(versions).toHaveLength(6);
     expect(new Set(versions)).toEqual(new Set(["actions/upload-artifact@v7"]));
   });
 
@@ -216,6 +218,56 @@ describe("device-checks.yml", () => {
     expect(text.slice(upload)).toMatch(
       /path: \|\n\s+qa-report\.json\n\s+qa-status\.txt\n/,
     );
+  });
+
+  describe("maestro-ios", () => {
+    const text = blocks["maestro-ios"];
+
+    it("is off unless the caller names an iOS runner, and runs on that runner alone", () => {
+      expect(workflow).toMatch(/ios-runner:\n {8}type: string\n {8}default: ""\n/);
+      expect(text).toContain("inputs.ios-runner != ''");
+      expect(text).toContain(
+        "runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}",
+      );
+    });
+
+    it("runs when Maestro runs, after the gate, and fails on its own when the gate did not pass", () => {
+      expect(text).toMatch(/^ {4}needs: \[changes, gate\]$/m);
+      expect(text).toMatch(/^ {4}if: \$\{\{ !cancelled\(\) && /m);
+      expect(text).toContain("needs.changes.outputs.run_maestro == 'true'");
+      const guard = text.indexOf("if: ${{ needs.gate.result != 'success' }}");
+      expect(guard).toBeGreaterThan(-1);
+      expect(guard).toBeLessThan(text.indexOf("build-ios-simulator-app@"));
+    });
+
+    it("keeps fork code and every secret off the runner, which can be a shared Mac", () => {
+      expect(text).toContain(
+        "github.event.pull_request.head.repo.full_name == github.repository",
+      );
+      expect(text).not.toMatch(/secrets\./);
+      expect(text).not.toMatch(/^ {4}environment:/m);
+    });
+
+    it("builds the app itself, for the vendor's iOS bundle id", () => {
+      expect(text).not.toContain("device-apk");
+      expect(text).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+platform: ios\n/);
+      expect(text).toContain("ci-workflows/actions/build-ios-simulator-app@");
+    });
+
+    it("runs the flows on a simulator of its own and deletes it whatever happened", () => {
+      expect(text).toContain("MAESTRO_PLATFORM: ios");
+      expect(text).toContain('ios-simulator.sh" create "$APP_PATH"');
+      expect(text).toContain('scripts/ci/run-maestro.sh"');
+      const last = text.slice(text.lastIndexOf("- name:"));
+      expect(last).toContain("if: always()");
+      expect(last).toContain('ios-simulator.sh" delete');
+    });
+
+    it("keeps its report for 15 days and the simulator app for 7, also when a flow failed", () => {
+      expect(text).toMatch(/name: maestro-ios\n[\s\S]*?retention-days: 15\n/);
+      expect(text).toMatch(/name: ios-simulator-app\n[\s\S]*?retention-days: 7\n/);
+      expect(text.match(/if: \$\{\{ !cancelled\(\) && steps\.app\.outputs\.app-path != '' \}\}/g)).toHaveLength(2);
+    });
   });
 
   it("keeps the QA agent to PRs from this repository", () => {
