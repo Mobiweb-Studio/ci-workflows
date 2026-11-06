@@ -9,8 +9,10 @@ name: device-checks
 # `device-checks / ios-app-link`, `device-checks / qa-agent` and `device-checks / jira-evidence`.
 #
 # Inputs
-#   runner            The runner label for every job but maestro-ios. The emulator jobs need KVM and a large disk,
+#   runner            The runner label for `apk`, `maestro-android` and `qa-agent`. The emulator jobs need KVM and a large disk,
 #                     so use a runner that has both. Default: the Blacksmith label the boilerplate uses.
+#   light-runner      The runner for `changes`, `gate`, `ios-app-link` and `jira-evidence`, which only read, wait or comment.
+#                     Default: ubuntu-latest, a GitHub-hosted runner, so they cost no Blacksmith minutes.
 #   ios-runner        The runner for maestro-ios, which builds the app for the iOS simulator and runs the flows
 #                     tagged `ios` there: a JSON array of labels, such as '["self-hosted","macOS","ARM64","ios"]',
 #                     or one hosted label, such as macos-15. The runner needs Xcode, CocoaPods and Java 17, and a
@@ -53,6 +55,9 @@ on:
       runner:
         type: string
         default: blacksmith-2vcpu-ubuntu-2404
+      light-runner:
+        type: string
+        default: ubuntu-latest
       ios-runner:
         type: string
         default: ""
@@ -102,7 +107,7 @@ jobs:
   changes:
     # Starts on every PR and decides which device jobs run. A job skipped by its condition counts as
     # passing, so a skipped check never blocks a merge.
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.light-runner }}
     permissions:
       contents: read
       pull-requests: read
@@ -137,7 +142,7 @@ jobs:
     # other checks are in other workflows, so this job waits by polling their check runs.
     needs: changes
     if: ${{ needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true' }}
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.light-runner }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -309,7 +314,7 @@ jobs:
     # writes comments is never handed to the iOS runner, which can be a shared Mac.
     needs: maestro-ios
     if: ${{ !cancelled() && needs.maestro-ios.outputs.app-url != '' }}
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.light-runner }}
     timeout-minutes: 5
     permissions:
       contents: read
@@ -460,7 +465,7 @@ jobs:
     # The poster turns every Jira failure into a warning and exits 0, so this job never turns a PR red.
     needs: [changes, gate, apk, maestro-android, maestro-ios, qa-agent]
     if: ${{ !cancelled() && inputs.jira-evidence && (needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true') && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.light-runner }}
     timeout-minutes: 10
     environment: jira-evidence
     permissions:
