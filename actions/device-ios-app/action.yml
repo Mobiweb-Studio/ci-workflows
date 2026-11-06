@@ -1,0 +1,90 @@
+name: Get the device-check iOS app
+description: >
+  Leaves one Release app for the iOS simulator of the vendor in APP_VARIANT at `app-path`. It computes the native
+  fingerprint of a fresh checkout and looks for a cached app with the same fingerprint: on a hit it repacks that app
+  with this commit's JS (`@expo/repack-app`, about 25 seconds), on a miss it builds one with build-ios-simulator-app
+  and caches it under the fingerprint. The key names the platform and the vendor too, so another vendor or any
+  native change is a miss (scripts/ci/device-apk-key.mjs). Needs device-check-env with platform `ios` run first
+  (Node, pnpm, APP_VARIANT), the checkout done and no `ios/` folder, because an existing native folder changes the
+  fingerprint. The iOS twin of device-apk.
+outputs:
+  app-path:
+    description: Where the .app is.
+    value: ${{ steps.result.outputs.app-path }}
+  source:
+    description: "`repacked` or `built`."
+    value: ${{ steps.result.outputs.source }}
+
+runs:
+  using: composite
+  steps:
+    - name: Switch crash reporting and the source map upload off, as for the CI APK
+      # The device-check app is built with no APP_ENV and no Sentry upload token (see build-android-apk).
+      shell: bash
+      run: |
+        echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
+        echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
+    - run: pnpm install --frozen-lockfile
+      shell: bash
+    - name: Compute the native fingerprint and the cache key
+      id: key
+      shell: bash
+      run: |
+        # The version is the one the installed Expo SDK uses, as in device-apk.
+        npx --yes @expo/fingerprint@0.20.13 fingerprint:generate --platform ios > "$RUNNER_TEMP/fingerprint-ios.json"
+        echo "key=$(node "$GITHUB_ACTION_PATH/../../scripts/ci/device-apk-key.mjs" "$APP_VARIANT" ios < "$RUNNER_TEMP/fingerprint-ios.json")" >> "$GITHUB_OUTPUT"
+    - name: Look for a cached app with this fingerprint
+      id: cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/source-app/app.zip
+        key: ${{ steps.key.outputs.key }}
+    - name: Repack the cached app with this commit's JS
+      id: repack
+      if: ${{ steps.cache.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: |
+        # A simulator app needs no signing, so nothing here is secret.
+        rm -rf "$RUNNER_TEMP/source-app/unzipped" "$RUNNER_TEMP/device-app"
+        mkdir -p "$RUNNER_TEMP/source-app/unzipped" "$RUNNER_TEMP/device-app"
+        ditto -x -k "$RUNNER_TEMP/source-app/app.zip" "$RUNNER_TEMP/source-app/unzipped"
+        source_app=$(ls -d "$RUNNER_TEMP/source-app/unzipped"/*.app | head -1)
+        app="$RUNNER_TEMP/device-app/$(basename "$source_app")"
+        npx --yes @expo/repack-app@0.10.4 --platform ios --source-app "$source_app" --output "$app"
+        echo "app-path=$app" >> "$GITHUB_OUTPUT"
+    - name: Build the app, none was cached for this fingerprint
+      id: build
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      uses: Mobiweb-Studio/ci-workflows/actions/build-ios-simulator-app@main
+    - name: Keep the new app for the next runs with this fingerprint
+      id: keep
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        BUILT: ${{ steps.build.outputs.app-path }}
+      run: |
+        rm -rf "$RUNNER_TEMP/source-app" "$RUNNER_TEMP/device-app"
+        mkdir -p "$RUNNER_TEMP/source-app" "$RUNNER_TEMP/device-app"
+        ditto -c -k --keepParent "$BUILT" "$RUNNER_TEMP/source-app/app.zip"
+        app="$RUNNER_TEMP/device-app/$(basename "$BUILT")"
+        ditto "$BUILT" "$app"
+        echo "app-path=$app" >> "$GITHUB_OUTPUT"
+    - name: Save the app under the fingerprint
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/source-app/app.zip
+        key: ${{ steps.key.outputs.key }}
+    - name: Say where the app came from
+      id: result
+      shell: bash
+      env:
+        HIT: ${{ steps.cache.outputs.cache-hit }}
+        KEY: ${{ steps.key.outputs.key }}
+        REPACKED: ${{ steps.repack.outputs.app-path }}
+        BUILT: ${{ steps.keep.outputs.app-path }}
+      run: |
+        if [ "$HIT" = "true" ]; then SOURCE=repacked; APP="$REPACKED"; else SOURCE=built; APP="$BUILT"; fi
+        echo "app-path=$APP" >> "$GITHUB_OUTPUT"
+        echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
+        echo "The iOS app for the device checks was $SOURCE (cache key \`$KEY\`)." >> "$GITHUB_STEP_SUMMARY"

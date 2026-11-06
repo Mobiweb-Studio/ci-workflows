@@ -5,8 +5,8 @@ const script = join(__dirname, "device-apk-key.mjs");
 const hashA = "a".repeat(40);
 const hashB = `b${"a".repeat(39)}`;
 
-function key(vendor: string, input: string) {
-  return spawnSync("node", [script, vendor], { input, encoding: "utf8" });
+function key(vendor: string, input: string, ...rest: string[]) {
+  return spawnSync("node", [script, vendor, ...rest], { input, encoding: "utf8" });
 }
 
 describe("device-apk-key", () => {
@@ -42,5 +42,26 @@ describe("device-apk-key", () => {
   it("stops with an error on a missing or unsafe vendor", () => {
     expect(key("", JSON.stringify({ hash: hashA })).status).toBe(1);
     expect(key("../x", JSON.stringify({ hash: hashA })).status).toBe(1);
+  });
+  it("keeps the Android key as it was, so the cached APKs stay valid", () => {
+    expect(key("default", JSON.stringify({ hash: hashA })).stdout).toBe(
+      `device-apk-v1-x86_64-default-${hashA}\n`,
+    );
+    expect(key("default", JSON.stringify({ hash: hashA }), "android").stdout).toBe(
+      `device-apk-v1-x86_64-default-${hashA}\n`,
+    );
+  });
+
+  it("prints an iOS simulator key that never matches an Android one", () => {
+    const ios = key("default", JSON.stringify({ hash: hashA }), "ios");
+    expect(ios.status).toBe(0);
+    expect(ios.stdout).toBe(`device-app-ios-v1-simulator-default-${hashA}\n`);
+    expect(key("acme", JSON.stringify({ hash: hashA }), "ios").stdout).not.toBe(ios.stdout);
+  });
+
+  it("stops with an error on an unknown platform", () => {
+    const result = key("default", JSON.stringify({ hash: hashA }), "web");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
   });
 });

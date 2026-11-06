@@ -81,7 +81,7 @@ jobs:
           RUN_ID: ${{ steps.find.outputs.run_id }}
         run: |
           # An artifact is missing when its check did not run in that run.
-          for name in qa-agent qa-report maestro-android; do
+          for name in qa-agent qa-report maestro-android maestro-ios; do
             gh run download "$RUN_ID" -n "$name" -D "evidence/$name" || echo "Run $RUN_ID has no $name artifact"
           done
       - name: Attach the screenshots to the Jira ticket

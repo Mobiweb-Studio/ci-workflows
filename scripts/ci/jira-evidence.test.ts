@@ -274,6 +274,41 @@ describe("jira-evidence", () => {
     expect(commentText()).toContain("1 flows passed, 1 failed");
   });
 
+  it("says nothing of iOS when the project runs no iOS check", async () => {
+    withQa(passingReport);
+    write("maestro-android/maestro-report-1.xml", junit(3, 0));
+    for (const result of [undefined, "skipped"]) {
+      requests.length = 0;
+      await run("run", { MAESTRO_IOS_RESULT: result });
+      expect(commentText()).not.toContain("iOS");
+    }
+  });
+
+  it("adds the iOS verdict with its own counts beside the Android one", async () => {
+    withQa(passingReport);
+    write("maestro-android/maestro-report-1.xml", junit(3, 0));
+    write("maestro-ios/maestro-report-items.xml", junit(1, 0));
+    const result = await run("run", { MAESTRO_IOS_RESULT: "success" });
+    expect(result.status).toBe(0);
+    expect(attachments()).toHaveLength(0);
+    const text = commentText();
+    expect(text).toContain("Maestro: passed");
+    expect(text).toContain("3 flows passed, 0 failed");
+    expect(text).toContain("Maestro on iOS: passed");
+    expect(text).toContain("1 flows passed, 0 failed");
+  });
+
+  it("attaches the iOS screenshots when only the iOS check failed", async () => {
+    withQa(passingReport);
+    write("maestro-android/maestro-report-1.xml", junit(3, 0));
+    write("maestro-ios/maestro-report-items.xml", junit(0, 1));
+    write("maestro-ios/.maestro/tests/run/ios-failure.png", "png bytes");
+    const result = await run("run", { MAESTRO_IOS_RESULT: "failure" });
+    expect(result.status).toBe(0);
+    expect(uploaded()).toContain("ios-failure.png");
+    expect(commentText()).toContain("Maestro on iOS: failed");
+  });
+
   it("attaches the screenshots of the given artifacts once in merge mode and posts one comment naming them", async () => {
     withQa(issueReport);
     write("maestro-android/.maestro/tests/run/failure.png", "png bytes");

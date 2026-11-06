@@ -6,7 +6,7 @@ name: device-checks
 # the native fingerprint matches, and builds one when it does not. Called from the project's own
 # `device-checks.yml`, whose job id is `device-checks`, so the checks report as `device-checks / changes`,
 # `device-checks / gate`, `device-checks / apk`, `device-checks / maestro-android`, `device-checks / maestro-ios`,
-# `device-checks / qa-agent` and `device-checks / jira-evidence`.
+# `device-checks / ios-app-link`, `device-checks / qa-agent` and `device-checks / jira-evidence`.
 #
 # Inputs
 #   runner            The runner label for every job but maestro-ios. The emulator jobs need KVM and a large disk,
@@ -15,7 +15,10 @@ name: device-checks
 #                     tagged `ios` there: a JSON array of labels, such as '["self-hosted","macOS","ARM64","ios"]',
 #                     or one hosted label, such as macos-15. The runner needs Xcode, CocoaPods and Java 17, and a
 #                     GUI session for the simulator (ADR 0014 in ICligo). Empty, the default, skips the job.
-#                     The job gets no secret, so it cannot install private packages.
+#                     The job gets no secret, so it cannot install private packages. It repacks a cached app when
+#                     the native fingerprint matches (the native-cache workflow seeds the cache from main) and
+#                     builds one when it does not. `ios-app-link` then comments the simulator app's link on the PR,
+#                     from the `runner`, so the token that writes comments never reaches the Mac.
 #   reference-vendor  The vendor folder to build and test; empty means "default". Pass
 #                     `${{ vars.REFERENCE_VENDOR }}`.
 #   maestro, qa-agent true by default. A project that declined a device check (docs/modules in the boilerplate)
@@ -238,6 +241,9 @@ jobs:
     if: ${{ !cancelled() && inputs.ios-runner != '' && needs.changes.outputs.run_maestro == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}
     timeout-minutes: 60
+    outputs:
+      app-url: ${{ steps.app-upload.outputs.artifact-url }}
+      app-source: ${{ steps.app.outputs.source }}
     env:
       MAESTRO_VERSION: 2.10.0
       MAESTRO_PLATFORM: ios
@@ -256,7 +262,7 @@ jobs:
           reference-vendor: ${{ inputs.reference-vendor }}
           platform: ios
       - id: app
-        uses: Mobiweb-Studio/ci-workflows/actions/build-ios-simulator-app@main
+        uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main
       - name: Create a simulator for this job and install the app
         env:
           APP_PATH: ${{ steps.app.outputs.app-path }}
@@ -285,6 +291,7 @@ jobs:
           APP_PATH: ${{ steps.app.outputs.app-path }}
         run: ditto -c -k --keepParent "$APP_PATH" ios-simulator-app.zip
       - name: Keep the simulator app, to try the PR in a Mac's Simulator
+        id: app-upload
         if: ${{ !cancelled() && steps.app.outputs.app-path != '' }}
         uses: actions/upload-artifact@v7
         with:
@@ -296,6 +303,34 @@ jobs:
       - name: Delete the simulator
         if: always()
         run: bash "$CI_WORKFLOWS_DIR/scripts/ci/ios-simulator.sh" delete
+
+  ios-app-link:
+    # Comments the link to the simulator app on the PR. A job of its own on the main runner, so the token that
+    # writes comments is never handed to the iOS runner, which can be a shared Mac.
+    needs: maestro-ios
+    if: ${{ !cancelled() && needs.maestro-ios.outputs.app-url != '' }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      GH_TOKEN: ${{ github.token }}
+      APP_URL: ${{ needs.maestro-ios.outputs.app-url }}
+      APP_SOURCE: ${{ needs.maestro-ios.outputs.app-source }}
+      MAESTRO_IOS_RESULT: ${{ needs.maestro-ios.result }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Comment the simulator app on the pull request
+        run: |
+          {
+            echo "**iOS simulator app** for ${HEAD_SHA:0:7} ($APP_SOURCE; maestro-ios: $MAESTRO_IOS_RESULT)"
+            echo
+            echo "[Download ios-simulator-app]($APP_URL), kept for 7 days. On a Mac with Xcode: unzip it, open the Simulator, and drag the .app onto it, or run \`xcrun simctl install booted <path>/<App>.app\`."
+          } > ios-app-comment.md
+          bash "$CI_WORKFLOWS_DIR/scripts/ci/upsert-pr-comment.sh" ios-simulator-app "$PR_NUMBER" ios-app-comment.md
 
   qa-agent:
     needs: [changes, gate, apk]
@@ -423,7 +458,7 @@ jobs:
     # Posts one comment with both verdicts to the ticket in the branch name (ADR 0019). Off until the repository
     # sets the variable JIRA_EVIDENCE to true. Same-repository PRs only, as qa-agent, so forks never see the token.
     # The poster turns every Jira failure into a warning and exits 0, so this job never turns a PR red.
-    needs: [changes, gate, apk, maestro-android, qa-agent]
+    needs: [changes, gate, apk, maestro-android, maestro-ios, qa-agent]
     if: ${{ !cancelled() && inputs.jira-evidence && (needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true') && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 10
@@ -452,6 +487,11 @@ jobs:
         with:
           name: maestro-android
           path: evidence/maestro-android
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: maestro-ios
+          path: evidence/maestro-ios
       - name: Post the evidence to the Jira ticket
         env:
           JIRA_BASE_URL: ${{ inputs.jira-base-url }}
@@ -464,6 +504,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           EVIDENCE_DIR: evidence
           MAESTRO_RESULT: ${{ needs.maestro-android.result }}
+          MAESTRO_IOS_RESULT: ${{ needs.maestro-ios.result }}
           GATE_RESULT: ${{ needs.gate.result }}
           APK_RESULT: ${{ needs.apk.result }}
         run: node "$CI_WORKFLOWS_DIR/scripts/ci/jira-evidence.mjs" run
