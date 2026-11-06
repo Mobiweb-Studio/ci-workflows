@@ -18,13 +18,14 @@ describe("device-checks.yml", () => {
     }
   });
 
-  it("has the seven jobs, with the check names unchanged and jira-evidence last", () => {
+  it("has the eight jobs, with the check names unchanged and jira-evidence last", () => {
     expect(Object.keys(blocks)).toEqual([
       "changes",
       "gate",
       "apk",
       "maestro-android",
       "maestro-ios",
+      "ios-app-link",
       "qa-agent",
       "jira-evidence",
     ]);
@@ -237,7 +238,7 @@ describe("device-checks.yml", () => {
       expect(text).toContain("needs.changes.outputs.run_maestro == 'true'");
       const guard = text.indexOf("if: ${{ needs.gate.result != 'success' }}");
       expect(guard).toBeGreaterThan(-1);
-      expect(guard).toBeLessThan(text.indexOf("build-ios-simulator-app@"));
+      expect(guard).toBeLessThan(text.indexOf("device-ios-app@"));
     });
 
     it("keeps fork code and every secret off the runner, which can be a shared Mac", () => {
@@ -248,10 +249,11 @@ describe("device-checks.yml", () => {
       expect(text).not.toMatch(/^ {4}environment:/m);
     });
 
-    it("builds the app itself, for the vendor's iOS bundle id", () => {
-      expect(text).not.toContain("device-apk");
+    it("gets the app itself, repacked by fingerprint or built, for the vendor's iOS bundle id", () => {
+      expect(text).not.toContain("actions/device-apk@");
       expect(text).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+platform: ios\n/);
-      expect(text).toContain("ci-workflows/actions/build-ios-simulator-app@");
+      expect(text).toContain("ci-workflows/actions/device-ios-app@");
+      expect(text).toContain("app-source: ${{ steps.app.outputs.source }}");
     });
 
     it("runs the flows on a simulator of its own and deletes it whatever happened", () => {
@@ -270,6 +272,25 @@ describe("device-checks.yml", () => {
     });
   });
 
+  describe("ios-app-link", () => {
+    const text = blocks["ios-app-link"];
+
+    it("comments the simulator app's link from the main runner, never from the iOS one", () => {
+      expect(text).toMatch(/^ {4}needs: maestro-ios$/m);
+      expect(text).toContain("if: ${{ !cancelled() && needs.maestro-ios.outputs.app-url != '' }}");
+      expect(text).toMatch(/^ {4}runs-on: \$\{\{ inputs\.runner \}\}$/m);
+      expect(blocks["maestro-ios"]).not.toContain("pull-requests: write");
+      expect(blocks["maestro-ios"]).not.toContain("github.token");
+    });
+
+    it("keeps one comment up to date by its marker, with the token and nothing else", () => {
+      expect(text).toMatch(/permissions:\n {6}contents: read\n {6}pull-requests: write\n/);
+      expect(text).toContain('upsert-pr-comment.sh" ios-simulator-app "$PR_NUMBER" ios-app-comment.md');
+      expect(text).toContain("APP_URL: ${{ needs.maestro-ios.outputs.app-url }}");
+      expect(text).not.toMatch(/secrets\./);
+    });
+  });
+
   it("keeps the QA agent to PRs from this repository", () => {
     expect(blocks["qa-agent"]).toContain(
       "github.event.pull_request.head.repo.full_name == github.repository",
@@ -281,7 +302,7 @@ describe("device-checks.yml", () => {
 
     it("needs the gate, the apk job and both device jobs", () => {
       expect(text).toMatch(
-        /^ {4}needs: \[changes, gate, apk, maestro-android, qa-agent\]$/m,
+        /^ {4}needs: \[changes, gate, apk, maestro-android, maestro-ios, qa-agent\]$/m,
       );
     });
 
@@ -297,7 +318,7 @@ describe("device-checks.yml", () => {
     });
 
     it("downloads the three artifacts of this run into one folder each, tolerating a missing one", () => {
-      for (const name of ["qa-agent", "qa-report", "maestro-android"]) {
+      for (const name of ["qa-agent", "qa-report", "maestro-android", "maestro-ios"]) {
         expect(text).toMatch(
           new RegExp(
             `continue-on-error: true\\n\\s+with:\\n\\s+name: ${name}\\n\\s+path: evidence/${name}\\n`,
@@ -310,6 +331,7 @@ describe("device-checks.yml", () => {
       expect(text).toContain('node "$CI_WORKFLOWS_DIR/scripts/ci/jira-evidence.mjs" run');
       for (const line of [
         "MAESTRO_RESULT: ${{ needs.maestro-android.result }}",
+        "MAESTRO_IOS_RESULT: ${{ needs.maestro-ios.result }}",
         "GATE_RESULT: ${{ needs.gate.result }}",
         "APK_RESULT: ${{ needs.apk.result }}",
         "BRANCH: ${{ github.head_ref }}",

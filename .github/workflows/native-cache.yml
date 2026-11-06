@@ -1,7 +1,8 @@
 name: native-cache
 
 # Builds the release APK on main, or finds it when the native fingerprint is unchanged, to leave the cached APK
-# (keyed by the fingerprint) and the ccache and Gradle caches that pull requests can restore. GitHub lets a pull
+# (keyed by the fingerprint) and the ccache and Gradle caches that pull requests can restore. With `ios-runner`
+# set, the `seed-ios` job does the same for the iOS simulator app that device-checks' maestro-ios repacks. GitHub lets a pull
 # request read only caches written by its base branch or by itself, so without this job the first run of every
 # pull request would build from scratch. Called from the project's own `native-cache.yml`, whose job id is
 # `native-cache`.
@@ -9,6 +10,9 @@ name: native-cache
 # Inputs
 #   runner            The runner label. Default: the Blacksmith label the boilerplate uses.
 #   reference-vendor  The vendor folder to build; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
+#   ios-runner        The iOS runner, as in device-checks (a JSON array of labels or one hosted label). Empty, the
+#                     default, skips `seed-ios`. Pass the same value as the device-checks caller. The job gets no
+#                     secret, so it cannot install private packages.
 # Secrets
 #   NPM_AUTH_TOKEN    Optional. The caller passes it by name from its repository secrets. For a project with private
 #                     packages on GitHub Packages, the `seed` job sets it in its environment and the device-apk
@@ -27,6 +31,9 @@ on:
       reference-vendor:
         type: string
         default: ""
+      ios-runner:
+        type: string
+        default: ""
     secrets:
       NPM_AUTH_TOKEN:
         required: false
@@ -43,3 +50,16 @@ jobs:
       - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+
+  seed-ios:
+    # The iOS twin of `seed`. No secret: the runner can be a shared self-hosted Mac.
+    if: ${{ inputs.ios-runner != '' }}
+    runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+        with:
+          reference-vendor: ${{ inputs.reference-vendor }}
+          platform: ios
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main

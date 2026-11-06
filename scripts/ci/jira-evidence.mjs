@@ -5,7 +5,8 @@
 //
 // Inputs come from the environment: JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY (optional), BRANCH,
 // PR_URL, RUN_URL, EVIDENCE_DIR (the downloaded artifacts, one folder per artifact: qa-agent, qa-report,
-// maestro-android; any may be missing), and for `run` also MAESTRO_RESULT, GATE_RESULT and APK_RESULT (job results).
+// maestro-android, maestro-ios; any may be missing), and for `run` also MAESTRO_RESULT, GATE_RESULT and APK_RESULT
+// (job results), and MAESTRO_IOS_RESULT (empty or `skipped` when the project runs no iOS check).
 // Jira must never change a device-check result: every failure prints a ::warning:: and the script exits 0.
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
@@ -175,19 +176,16 @@ function filesIn(folder) {
     : [];
 }
 
-// Passed and failed flows, summed over Maestro's JUnit reports.
-function maestroCounts() {
-  const reports = filesIn("maestro-android").filter((file) =>
+// Passed and failed flows, summed over Maestro's JUnit reports in one artifact folder.
+function maestroCounts(folder) {
+  const reports = filesIn(folder).filter((file) =>
     /(^|\/)maestro-report-[^/]*\.xml$/.test(file),
   );
   if (reports.length === 0) return null;
   let tests = 0;
   let failures = 0;
   for (const file of reports) {
-    const xml = readFileSync(
-      join(evidenceDir, "maestro-android", file),
-      "utf8",
-    );
+    const xml = readFileSync(join(evidenceDir, folder, file), "utf8");
     for (const suite of xml.matchAll(/<testsuite\b[^>]*>/g)) {
       tests += Number(/\btests="(\d+)"/.exec(suite[0])?.[1] ?? 0);
       failures += Number(/\bfailures="(\d+)"/.exec(suite[0])?.[1] ?? 0);
@@ -226,9 +224,11 @@ function screenshots(qa) {
   const qaFolderPaths = filesIn("qa-agent")
     .filter((file) => file.startsWith("qa-artifacts/") && file.endsWith(".png"))
     .map((file) => safeScreenshot("qa-agent", file));
-  const maestroPaths = filesIn("maestro-android")
-    .filter((file) => file.endsWith(".png"))
-    .map((file) => safeScreenshot("maestro-android", file));
+  const maestroPaths = ["maestro-android", "maestro-ios"].flatMap((folder) =>
+    filesIn(folder)
+      .filter((file) => file.endsWith(".png"))
+      .map((file) => safeScreenshot(folder, file)),
+  );
   return [
     ...new Set(
       [...qaPaths, ...qaFolderPaths, ...maestroPaths].filter(
@@ -276,18 +276,21 @@ function qaVerdict(qa) {
 
 const MAESTRO_WORDS = { success: "passed", failure: "failed" };
 
-function maestroVerdict(result) {
-  const counts = maestroCounts();
+function maestroVerdict(label, folder, result) {
+  const counts = maestroCounts(folder);
   const detail = counts
     ? ` ${counts.passed} flows passed, ${counts.failed} failed.`
     : "";
   return [
     paragraph(
-      strong(`Maestro: ${MAESTRO_WORDS[result] ?? result ?? "unknown"}`),
+      strong(`${label}: ${MAESTRO_WORDS[result] ?? result ?? "unknown"}`),
       ...(detail ? [text(detail)] : []),
     ),
   ];
 }
+
+// The iOS check runs only for projects that set ios-runner; otherwise its job is skipped and the comment says nothing of it.
+const iosRan = (result) => Boolean(result) && result !== "skipped";
 
 function attachedList({ attached, failed }) {
   return [
@@ -324,15 +327,21 @@ async function postRun() {
   }
   const qa = readQaReport();
   const maestroResult = process.env.MAESTRO_RESULT;
+  const iosResult = process.env.MAESTRO_IOS_RESULT;
   const flagged =
-    maestroResult === "failure" || (qa !== null && qa.status !== "pass");
+    maestroResult === "failure" ||
+    iosResult === "failure" ||
+    (qa !== null && qa.status !== "pass");
   const uploads = flagged
     ? await attach(screenshots(qa))
     : { attached: [], failed: [] };
   await comment([
     heading,
     ...qaVerdict(qa),
-    ...maestroVerdict(maestroResult),
+    ...maestroVerdict("Maestro", "maestro-android", maestroResult),
+    ...(iosRan(iosResult)
+      ? maestroVerdict("Maestro on iOS", "maestro-ios", iosResult)
+      : []),
     ...attachedList(uploads),
     ...links(),
   ]);
