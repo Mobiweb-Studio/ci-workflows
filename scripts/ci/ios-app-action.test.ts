@@ -65,3 +65,43 @@ describe("native-cache seed-ios", () => {
     expect(text).not.toMatch(/secrets\./);
   });
 });
+
+describe("ios-regression.yml", () => {
+  const workflow = read(".github", "workflows", "ios-regression.yml");
+  const regression = jobs(workflow).regression ?? "";
+
+  it("refuses every event but schedule and workflow_dispatch before it checks out any code", () => {
+    const guard = regression.indexOf('"$EVENT_NAME" != "schedule" ] && [ "$EVENT_NAME" != "workflow_dispatch"');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(regression.indexOf("actions/checkout@"));
+    expect(workflow).not.toMatch(/^ *pull_request(_target)?:/m);
+  });
+
+  it("runs on the iOS runner only when one is named, one runtime at a time, with no secret", () => {
+    expect(regression).toContain("if: ${{ inputs.ios-runner != '' }}");
+    expect(regression).toContain(
+      "runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}",
+    );
+    expect(regression).toMatch(/max-parallel: 1\n/);
+    expect(regression).toMatch(/fail-fast: false\n/);
+    expect(regression).toContain("runtime: ${{ fromJSON(inputs.runtimes) }}");
+    expect(regression).toContain("IOS_RUNTIME: ${{ matrix.runtime }}");
+    expect(workflow).not.toMatch(/secrets\./);
+    expect(workflow).not.toMatch(/^ {4}secrets:/m);
+  });
+
+  it("runs every flow and lets only the summary fail the job", () => {
+    expect(regression).toContain('MAESTRO_ALL_FLOWS: "true"');
+    const flows = regression.indexOf('run-maestro.sh"');
+    expect(regression.slice(regression.lastIndexOf("- name:", flows), flows)).toContain("continue-on-error: true");
+    expect(regression.indexOf("ios-regression-summary.mjs")).toBeGreaterThan(flows);
+    const last = regression.slice(regression.lastIndexOf("- name:"));
+    expect(last).toContain("if: always()");
+    expect(last).toContain('ios-simulator.sh" delete');
+  });
+
+  it("uses the same app as device-checks' maestro-ios", () => {
+    expect(regression).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+platform: ios\n/);
+    expect(regression).toContain("ci-workflows/actions/device-ios-app@");
+  });
+});

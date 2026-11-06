@@ -9,10 +9,13 @@
 # saw a blank screen.
 #
 # With MAESTRO_PLATFORM=ios it runs on the simulator in IOS_UDID, and only the flows whose config section tags
-# them `ios`: a flow written for Android (its text, its system dialogs) is opted in once it passes on iOS.
+# them `ios`: a flow written for Android (its text, its system dialogs) is opted in once it passes on iOS. With
+# MAESTRO_ALL_FLOWS=true it runs every flow, tagged or not, which the weekly iOS regression uses to find the
+# flows that could be tagged.
 set -euo pipefail
 
 platform="${MAESTRO_PLATFORM:-android}"
+all_flows="${MAESTRO_ALL_FLOWS:-false}"
 
 flows=(.maestro/flows/*.yml)
 if [ -d "vendors/$APP_VARIANT/maestro" ]; then
@@ -29,7 +32,7 @@ ran=0
 for flow in "${flows[@]}"; do
   name=$(basename "$flow" .yml)
   if [ "$platform" = ios ]; then
-    if ! tagged_ios "$flow"; then
+    if [ "$all_flows" != true ] && ! tagged_ios "$flow"; then
       echo "Not tagged ios, skipped: $flow"
       continue
     fi

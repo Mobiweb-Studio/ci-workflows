@@ -1,0 +1,25 @@
+name: ios-regression
+
+# Every Maestro flow on iOS, once a week on main, on the runtimes in IOS_REGRESSION_RUNTIMES. The shared workflow
+# refuses any event but schedule and workflow_dispatch: never trigger it from a pull request.
+on:
+  schedule:
+    # Sundays at 03:00 UTC, when the iOS runner is idle.
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-regression
+  cancel-in-progress: false
+
+jobs:
+  ios-regression:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/ios-regression.yml@v1
+    with:
+      ios-runner: ${{ vars.IOS_RUNNER }}
+      reference-vendor: ${{ vars.REFERENCE_VENDOR }}
+      # A JSON array of iOS versions installed on the runner, such as '["27.1","26.4"]'. Empty means the newest.
+      runtimes: ${{ vars.IOS_REGRESSION_RUNTIMES || '["newest"]' }}
