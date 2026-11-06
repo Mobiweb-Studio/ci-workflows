@@ -47,7 +47,7 @@ jobs:
       NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@v1.7.0-rc.1
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
 
@@ -58,8 +58,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@v1.7.0-rc.1
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
           platform: ios
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@v1.7.0-rc.1
