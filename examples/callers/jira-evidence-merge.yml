@@ -18,6 +18,8 @@ jobs:
       jira-base-url: ${{ vars.JIRA_BASE_URL }}
       jira-email: ${{ vars.JIRA_EMAIL }}
       jira-project-key: ${{ vars.JIRA_PROJECT_KEY }}
+      # To post to each story's sub-task labelled qa instead of the branch's ticket, add:
+      # jira-evidence-target: qa-subtask
     # A repository secret, passed by name. The shared job still declares the jira-evidence environment as a gate.
     secrets:
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}

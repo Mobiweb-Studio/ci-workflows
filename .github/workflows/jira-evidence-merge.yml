@@ -1,9 +1,10 @@
 name: jira-evidence-merge
 
 # When a PR merges, attaches the screenshots of its last device-check run to the Jira ticket in the branch name
-# (ADR 0019), so the ticket keeps them after GitHub deletes the artifacts (15 days). Off until the caller passes
-# jira-evidence as true. Missing evidence and every Jira failure are warnings, never a failed job. Called from the
-# project's own `jira-evidence-merge.yml`, whose job id is `jira-evidence-merge`.
+# (ADR 0019), or to its story's QA sub-task when jira-evidence-target is qa-subtask, so the ticket keeps them after
+# GitHub deletes the artifacts (15 days). Off until the caller passes jira-evidence as true. Missing evidence and
+# every Jira failure are warnings, never a failed job. Called from the project's own `jira-evidence-merge.yml`, whose
+# job id is `jira-evidence-merge`.
 #
 # Inputs
 #   runner            The runner label. Default: ubuntu-latest, a GitHub-hosted
@@ -12,6 +13,14 @@ name: jira-evidence-merge
 #   jira-base-url, jira-email, jira-project-key
 #                     The Jira site, the account's e-mail and the project key. Pass the repository variables
 #                     JIRA_BASE_URL, JIRA_EMAIL and JIRA_PROJECT_KEY.
+#   jira-evidence-target
+#                     Which ticket gets the evidence: `branch-ticket`, the default, is the ticket in the branch name;
+#                     `qa-subtask` is the story's sub-task with the label `jira-qa-label` (the branch's ticket is the
+#                     story, or its parent when it is a sub-task). With no such sub-task, or more than one, the
+#                     evidence goes to the branch's ticket with a warning. People make the QA sub-task; the poster
+#                     never creates or edits an issue.
+#   jira-qa-label     The label that marks the story's QA sub-task when `jira-evidence-target` is `qa-subtask`.
+#                     Default: qa.
 # Secrets: JIRA_API_TOKEN, passed by the caller by name from its repository secrets. The job also declares the
 # `jira-evidence` environment as a gate, but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, actions: read.
@@ -37,6 +46,12 @@ on:
       jira-project-key:
         type: string
         default: ""
+      jira-evidence-target:
+        type: string
+        default: branch-ticket
+      jira-qa-label:
+        type: string
+        default: qa
     secrets:
       JIRA_API_TOKEN:
         required: false
@@ -91,6 +106,8 @@ jobs:
           JIRA_BASE_URL: ${{ inputs.jira-base-url }}
           JIRA_EMAIL: ${{ inputs.jira-email }}
           JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
+          JIRA_EVIDENCE_TARGET: ${{ inputs.jira-evidence-target }}
+          JIRA_QA_LABEL: ${{ inputs.jira-qa-label }}
           # The token is only visible to this step.
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           BRANCH: ${{ github.head_ref }}

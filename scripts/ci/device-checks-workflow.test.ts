@@ -352,5 +352,20 @@ describe("device-checks.yml", () => {
       const poster = text.slice(text.lastIndexOf("- name:"));
       expect(poster).toContain("secrets.JIRA_API_TOKEN");
     });
+
+    it("takes the evidence target and QA label as optional inputs whose defaults keep the branch's ticket", () => {
+      expect(workflow).toMatch(
+        /\n {6}jira-evidence-target:\n {8}type: string\n {8}default: branch-ticket\n/,
+      );
+      expect(workflow).toMatch(
+        /\n {6}jira-qa-label:\n {8}type: string\n {8}default: qa\n/,
+      );
+      const poster = text.slice(text.lastIndexOf("- name:"));
+      expect(poster).toContain(
+        "JIRA_EVIDENCE_TARGET: ${{ inputs.jira-evidence-target }}",
+      );
+      expect(poster).toContain("JIRA_QA_LABEL: ${{ inputs.jira-qa-label }}");
+      expect(poster).not.toContain("continue-on-error");
+    });
   });
 });

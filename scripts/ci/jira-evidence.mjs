@@ -1,4 +1,5 @@
-// Posts the evidence of a device-check run to the Jira ticket named by the branch (ADR 0019).
+// Posts the evidence of a device-check run to the Jira ticket named by the branch, or to its story's QA sub-task
+// (ADR 0019).
 //
 //   node scripts/ci/jira-evidence.mjs run     one comment with both verdicts; screenshots when a check failed or QA found an issue
 //   node scripts/ci/jira-evidence.mjs merge   the screenshots of the PR's last device-check run, and one comment naming them
@@ -7,6 +8,12 @@
 // PR_URL, RUN_URL, EVIDENCE_DIR (the downloaded artifacts, one folder per artifact: qa-agent, qa-report,
 // maestro-android, maestro-ios; any may be missing), and for `run` also MAESTRO_RESULT, GATE_RESULT and APK_RESULT
 // (job results), and MAESTRO_IOS_RESULT (empty or `skipped` when the project runs no iOS check).
+//
+// JIRA_EVIDENCE_TARGET picks the ticket that gets the evidence. `branch-ticket`, the default, is the ticket named by the
+// branch. `qa-subtask` is the story's QA sub-task: the branch's ticket, or its parent when it is a sub-task, is the
+// story, and its one sub-task with the label JIRA_QA_LABEL (default `qa`) gets the evidence. With no such sub-task, or
+// more than one, or when Jira cannot be read, the evidence goes to the branch's ticket with a ::warning::. The Jira
+// account only reads, comments and attaches: the QA sub-task is made by a person, never by this script.
 // Jira must never change a device-check result: every failure prints a ::warning:: and the script exits 0.
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
@@ -58,13 +65,25 @@ const evidenceDir = existsSync(process.env.EVIDENCE_DIR)
 const prUrl = process.env.PR_URL ?? "";
 const runUrl = process.env.RUN_URL ?? "";
 
-// One call to the ticket's REST endpoint. Returns true on a 2xx answer, false on any other answer, and null when Jira
-// did not answer; it warns on both. A call that takes over a minute is given up, so a hung Jira is a warning and not
-// the job's timeout.
-async function jira(step, path, init) {
+const TARGETS = ["branch-ticket", "qa-subtask"];
+let targetMode = process.env.JIRA_EVIDENCE_TARGET || "branch-ticket";
+if (!TARGETS.includes(targetMode)) {
+  warn(
+    `unknown JIRA_EVIDENCE_TARGET "${targetMode}", use "branch-ticket" or "qa-subtask"; posting to ${key}`,
+  );
+  targetMode = "branch-ticket";
+}
+const qaLabel = process.env.JIRA_QA_LABEL || "qa";
+// The ticket that gets the comment and the screenshots, set by resolveTarget before anything is posted.
+let target = key;
+
+// One call to Jira's REST API about one issue. Returns the response on a 2xx answer, false on any other answer, and
+// null when Jira did not answer; it warns on both. A call that takes over a minute is given up, so a hung Jira is a
+// warning and not the job's timeout.
+async function request(step, issue, path, init = {}) {
   let response;
   try {
-    response = await fetch(`${baseUrl}/rest/api/3/issue/${key}/${path}`, {
+    response = await fetch(`${baseUrl}/rest/api/3/issue/${issue}${path}`, {
       ...init,
       signal: AbortSignal.timeout(60_000),
       headers: {
@@ -74,7 +93,9 @@ async function jira(step, path, init) {
       },
     });
   } catch (error) {
-    warn(`${step} on ${key} failed: ${error.cause?.message ?? error.message}`);
+    warn(
+      `${step} on ${issue} failed: ${error.cause?.message ?? error.message}`,
+    );
     return null;
   }
   if (!response.ok) {
@@ -82,10 +103,75 @@ async function jira(step, path, init) {
       response.status === 404
         ? " (no such ticket, or the Jira account cannot see it)"
         : "";
-    warn(`${step} on ${key} failed: Jira answered ${response.status}${hint}`);
+    warn(`${step} on ${issue} failed: Jira answered ${response.status}${hint}`);
     return false;
   }
-  return true;
+  return response;
+}
+
+// One call to the target ticket's REST endpoint. Returns true on a 2xx answer, false on any other answer, and null
+// when Jira did not answer.
+async function jira(step, path, init) {
+  const response = await request(step, target, `/${path}`, init);
+  return response ? true : response;
+}
+
+// Reads the given fields of one issue. Returns null when Jira did not give them; request() has warned.
+async function fields(issue, names) {
+  const response = await request(`reading ${names}`, issue, `?fields=${names}`);
+  if (!response) return null;
+  return (await response.json()).fields ?? {};
+}
+
+// The story's one sub-task with the QA label, or the reason why there is none to post to.
+async function findQaSubtask() {
+  const own = await fields(key, "subtasks,issuetype,parent");
+  if (own === null) return { reason: `${key} could not be read` };
+  let story = key;
+  let subtasks = own.subtasks ?? [];
+  if (own.issuetype?.subtask) {
+    story = own.parent?.key;
+    if (!story) return { reason: `${key} is a sub-task with no parent` };
+    const parent = await fields(story, "subtasks");
+    if (parent === null)
+      return { reason: `its story ${story} could not be read` };
+    subtasks = parent.subtasks ?? [];
+  }
+  // The sub-task list in an issue carries no labels, so each sub-task is read on its own.
+  const labelled = [];
+  for (const subtask of subtasks) {
+    const its = await fields(subtask.key, "labels");
+    if (its === null)
+      return {
+        reason: `sub-task ${subtask.key} of ${story} could not be read`,
+      };
+    if ((its.labels ?? []).includes(qaLabel)) labelled.push(subtask.key);
+  }
+  if (labelled.length === 0)
+    return { reason: `no sub-task of ${story} has the label "${qaLabel}"` };
+  if (labelled.length > 1)
+    return {
+      reason: `${labelled.length} sub-tasks of ${story} have the label "${qaLabel}" (${labelled.join(", ")})`,
+    };
+  return { story, subtask: labelled[0] };
+}
+
+async function resolveTarget() {
+  if (targetMode !== "qa-subtask") return;
+  let found;
+  try {
+    found = await findQaSubtask();
+  } catch (error) {
+    found = { reason: `Jira's answer could not be read: ${error.message}` };
+  }
+  if (found.subtask) {
+    target = found.subtask;
+    console.log(
+      `jira-evidence: posting to ${target}, the QA sub-task of ${found.story}`,
+    );
+    return;
+  }
+  warn(`no QA sub-task to post to: ${found.reason}; posting to ${key} instead`);
 }
 
 // Uploads each file in its own request, so one file Jira refuses, such as one over its size limit, does not drop the
@@ -371,6 +457,7 @@ async function postMerge() {
 
 // Anything unexpected, such as a malformed report, is a warning too.
 try {
+  await resolveTarget();
   if (command === "run") await postRun();
   else await postMerge();
 } catch (error) {
