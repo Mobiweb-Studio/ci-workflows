@@ -69,6 +69,21 @@ describe("jira-evidence-merge.yml", () => {
     expect(post).toContain("if: ${{ steps.find.outputs.run_id != '' }}");
   });
 
+  it("takes the evidence target and QA label as optional inputs whose defaults keep the branch's ticket", () => {
+    expect(workflow).toMatch(
+      /\n {6}jira-evidence-target:\n {8}type: string\n {8}default: branch-ticket\n/,
+    );
+    expect(workflow).toMatch(
+      /\n {6}jira-qa-label:\n {8}type: string\n {8}default: qa\n/,
+    );
+    const post = job.slice(job.lastIndexOf("- name:"));
+    expect(post).toContain(
+      "JIRA_EVIDENCE_TARGET: ${{ inputs.jira-evidence-target }}",
+    );
+    expect(post).toContain("JIRA_QA_LABEL: ${{ inputs.jira-qa-label }}");
+    expect(post).not.toContain("continue-on-error");
+  });
+
   it("gives the Jira token to the poster step alone", () => {
     expect(job.match(/secrets\./g)).toHaveLength(1);
     const post = job.slice(job.lastIndexOf("- name:"));

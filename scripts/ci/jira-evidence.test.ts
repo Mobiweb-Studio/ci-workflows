@@ -91,11 +91,14 @@ describe("jira-evidence", () => {
   let attachmentStatus: number | undefined;
   let tooLarge: string | undefined;
   let hangUpOnUpload: boolean;
+  let issues: Record<string, Record<string, unknown>>;
+  let readStatus: number | undefined;
   let dir: string;
 
   // A stand-in for Jira: records every request and answers with answerStatus, or with attachmentStatus when set and
   // the request is an upload. It answers 413 to an upload of the file named tooLarge, and closes the connection
-  // without an answer on every upload when hangUpOnUpload is set.
+  // without an answer on every upload when hangUpOnUpload is set. A GET reads an issue: it answers with that issue's
+  // fields from `issues`, 404 for an issue not there, or readStatus when set.
   beforeAll(async () => {
     server = createServer((request, response) => {
       const chunks: Buffer[] = [];
@@ -107,6 +110,16 @@ describe("jira-evidence", () => {
           headers: request.headers,
           body: Buffer.concat(chunks).toString("latin1"),
         });
+        if (request.method === "GET") {
+          const issue =
+            /\/issue\/([^/?]+)\?/.exec(request.url ?? "")?.[1] ?? "";
+          const fields = issues[issue];
+          response.writeHead(readStatus ?? (fields ? 200 : 404), {
+            "Content-Type": "application/json",
+          });
+          response.end(JSON.stringify({ key: issue, fields }));
+          return;
+        }
         const upload = request.url?.endsWith("/attachments") ?? false;
         if (upload && hangUpOnUpload) {
           request.socket.destroy();
@@ -138,6 +151,8 @@ describe("jira-evidence", () => {
     attachmentStatus = undefined;
     tooLarge = undefined;
     hangUpOnUpload = false;
+    issues = {};
+    readStatus = undefined;
     dir = mkdtempSync(join(tmpdir(), "jira-evidence-"));
   });
 
@@ -200,14 +215,15 @@ describe("jira-evidence", () => {
     });
   };
 
-  const comments = () =>
+  const comments = (issue = "MBLPT-12") =>
     requests.filter(
-      (request) => request.url === "/rest/api/3/issue/MBLPT-12/comment",
+      (request) => request.url === `/rest/api/3/issue/${issue}/comment`,
     );
-  const attachments = () =>
+  const attachments = (issue = "MBLPT-12") =>
     requests.filter(
-      (request) => request.url === "/rest/api/3/issue/MBLPT-12/attachments",
+      (request) => request.url === `/rest/api/3/issue/${issue}/attachments`,
     );
+  const reads = () => requests.filter((request) => request.method === "GET");
   const uploaded = () =>
     attachments().map(
       (request) => /filename="([^"]*)"/.exec(request.body)?.[1] ?? "",
@@ -665,5 +681,172 @@ describe("jira-evidence", () => {
     const text = commentText();
     expect(text).not.toContain("Attached screenshots");
     expect(text).toMatch(/did not take[^\n]*\n01-home\.png\n02-detail\.png/);
+  });
+  describe("the ticket chosen by JIRA_EVIDENCE_TARGET", () => {
+    const qaSubtask = { JIRA_EVIDENCE_TARGET: "qa-subtask" };
+    const sub = (key: string) => ({ key });
+    const story = (...subtasks: string[]) => {
+      issues["MBLPT-12"] = {
+        issuetype: { subtask: false },
+        subtasks: subtasks.map(sub),
+      };
+    };
+    const subtask = (key: string, labels: string[]) => {
+      issues[key] = {
+        issuetype: { subtask: true },
+        parent: { key: "MBLPT-12" },
+        subtasks: [],
+        labels,
+      };
+    };
+    // Story MBLPT-12 with a [FE] sub-task MBLPT-13 and a [QA] sub-task MBLPT-14.
+    beforeEach(() => {
+      story("MBLPT-13", "MBLPT-14");
+      subtask("MBLPT-13", ["fe"]);
+      subtask("MBLPT-14", ["qa"]);
+    });
+
+    it("leaves the default unchanged: no read of Jira, and everything goes to the branch's ticket", async () => {
+      withQa(issueReport);
+      const result = await run("run");
+      expect(result.status).toBe(0);
+      expect(reads()).toHaveLength(0);
+      expect(comments()).toHaveLength(1);
+      expect(attachments()).toHaveLength(2);
+      expect(warnings(result.output)).toEqual([]);
+    });
+
+    it("treats an explicit branch-ticket as the default", async () => {
+      withQa(passingReport);
+      const result = await run("run", {
+        JIRA_EVIDENCE_TARGET: "branch-ticket",
+      });
+      expect(reads()).toHaveLength(0);
+      expect(comments()).toHaveLength(1);
+      expect(warnings(result.output)).toEqual([]);
+    });
+
+    it("posts the comment and the screenshots of a story's branch to its QA sub-task", async () => {
+      withQa(issueReport);
+      const result = await run("run", qaSubtask);
+      expect(result.status).toBe(0);
+      expect(reads()[0].url).toBe(
+        "/rest/api/3/issue/MBLPT-12?fields=subtasks,issuetype,parent",
+      );
+      expect(comments("MBLPT-14")).toHaveLength(1);
+      expect(attachments("MBLPT-14")).toHaveLength(2);
+      expect(comments()).toHaveLength(0);
+      expect(attachments()).toHaveLength(0);
+      expect(warnings(result.output)).toEqual([]);
+      expect(result.output).toContain("MBLPT-14, the QA sub-task of MBLPT-12");
+    });
+
+    it("posts from a sub-task's branch to its parent story's QA sub-task", async () => {
+      withQa(passingReport);
+      const result = await run("run", {
+        ...qaSubtask,
+        BRANCH: "feat/MBLPT-13-home-screen",
+      });
+      expect(result.status).toBe(0);
+      expect(comments("MBLPT-14")).toHaveLength(1);
+      expect(comments("MBLPT-13")).toHaveLength(0);
+      expect(warnings(result.output)).toEqual([]);
+    });
+
+    it("attaches the merge screenshots to the QA sub-task", async () => {
+      withQa(issueReport);
+      const result = await run("merge", qaSubtask);
+      expect(result.status).toBe(0);
+      expect(attachments("MBLPT-14")).toHaveLength(2);
+      expect(comments("MBLPT-14")).toHaveLength(1);
+      expect(attachments()).toHaveLength(0);
+    });
+
+    it("finds the sub-task by the label given in JIRA_QA_LABEL", async () => {
+      withQa(passingReport);
+      const result = await run("run", { ...qaSubtask, JIRA_QA_LABEL: "fe" });
+      expect(comments("MBLPT-13")).toHaveLength(1);
+      expect(warnings(result.output)).toEqual([]);
+    });
+
+    it("posts to the branch's ticket with a warning naming the story when no sub-task has the label", async () => {
+      story("MBLPT-13");
+      withQa(passingReport);
+      const result = await run("run", qaSubtask);
+      expect(result.status).toBe(0);
+      expect(comments()).toHaveLength(1);
+      expect(warnings(result.output)).toEqual([
+        '::warning::jira-evidence: no QA sub-task to post to: no sub-task of MBLPT-12 has the label "qa"; posting to MBLPT-12 instead',
+      ]);
+    });
+
+    it("posts to the branch's ticket with a warning naming both when two sub-tasks have the label", async () => {
+      story("MBLPT-13", "MBLPT-14", "MBLPT-15");
+      subtask("MBLPT-15", ["qa", "regression"]);
+      withQa(passingReport);
+      const result = await run("run", qaSubtask);
+      expect(result.status).toBe(0);
+      expect(comments()).toHaveLength(1);
+      expect(comments("MBLPT-14")).toHaveLength(0);
+      expect(comments("MBLPT-15")).toHaveLength(0);
+      expect(warnings(result.output)).toEqual([
+        '::warning::jira-evidence: no QA sub-task to post to: 2 sub-tasks of MBLPT-12 have the label "qa" (MBLPT-14, MBLPT-15); posting to MBLPT-12 instead',
+      ]);
+    });
+
+    it("posts from a sub-task's branch to that sub-task, with a warning, when its story has no QA sub-task", async () => {
+      story("MBLPT-13");
+      withQa(passingReport);
+      const result = await run("run", {
+        ...qaSubtask,
+        BRANCH: "feat/MBLPT-13-home-screen",
+      });
+      expect(comments("MBLPT-13")).toHaveLength(1);
+      expect(
+        warnings(result.output).some((line) =>
+          line.includes("posting to MBLPT-13 instead"),
+        ),
+      ).toBe(true);
+    });
+
+    it("warns and exits 0, still posting to the branch's ticket, when Jira answers an error while resolving", async () => {
+      readStatus = 500;
+      withQa(passingReport);
+      const result = await run("run", qaSubtask);
+      expect(result.status).toBe(0);
+      expect(reads()).toHaveLength(1);
+      expect(comments()).toHaveLength(1);
+      const lines = warnings(result.output);
+      expect(
+        lines.some((line) => line.includes("MBLPT-12") && line.includes("500")),
+      ).toBe(true);
+      expect(
+        lines.some((line) => line.includes("posting to MBLPT-12 instead")),
+      ).toBe(true);
+    });
+
+    it("warns and exits 0 when Jira cannot read a sub-task's labels", async () => {
+      delete issues["MBLPT-14"];
+      withQa(passingReport);
+      const result = await run("run", qaSubtask);
+      expect(result.status).toBe(0);
+      expect(comments()).toHaveLength(1);
+      expect(
+        warnings(result.output).some((line) =>
+          line.includes("sub-task MBLPT-14 of MBLPT-12 could not be read"),
+        ),
+      ).toBe(true);
+    });
+
+    it("warns about an unknown target and keeps the branch's ticket", async () => {
+      withQa(passingReport);
+      const result = await run("run", { JIRA_EVIDENCE_TARGET: "story" });
+      expect(result.status).toBe(0);
+      expect(reads()).toHaveLength(0);
+      expect(comments()).toHaveLength(1);
+      expect(
+        warnings(result.output).some((line) => line.includes('"story"')),
+      ).toBe(true);
+    });
   });
 });

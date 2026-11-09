@@ -35,6 +35,8 @@ jobs:
       jira-base-url: ${{ vars.JIRA_BASE_URL }}
       jira-email: ${{ vars.JIRA_EMAIL }}
       jira-project-key: ${{ vars.JIRA_PROJECT_KEY }}
+      # To post to each story's sub-task labelled qa instead of the branch's ticket, add:
+      # jira-evidence-target: qa-subtask
     # Repository secrets, passed by name. A caller job cannot declare an environment, so an environment's secret
     # never reaches the shared workflow; its jobs still declare the environments (qa-agent, jira-evidence) as approval gates.
     secrets:

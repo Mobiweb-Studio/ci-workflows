@@ -35,6 +35,14 @@ name: device-checks
 #   jira-base-url, jira-email, jira-project-key
 #                     The Jira site, the account's e-mail and the project key. Pass the repository variables
 #                     JIRA_BASE_URL, JIRA_EMAIL and JIRA_PROJECT_KEY.
+#   jira-evidence-target
+#                     Which ticket gets the evidence: `branch-ticket`, the default, is the ticket in the branch name;
+#                     `qa-subtask` is the story's sub-task with the label `jira-qa-label` (the branch's ticket is the
+#                     story, or its parent when it is a sub-task). With no such sub-task, or more than one, the
+#                     evidence goes to the branch's ticket with a warning. People make the QA sub-task; the poster
+#                     never creates or edits an issue.
+#   jira-qa-label     The label that marks the story's QA sub-task when `jira-evidence-target` is `qa-subtask`.
+#                     Default: qa.
 # Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job),
 # JIRA_API_TOKEN (the `jira-evidence` job) and optionally NPM_AUTH_TOKEN (the `apk` job's `pnpm install`, for a project
 # with private packages on GitHub Packages: the device-apk action writes its reference to ~/.npmrc; without it the
@@ -95,6 +103,12 @@ on:
       jira-project-key:
         type: string
         default: ""
+      jira-evidence-target:
+        type: string
+        default: branch-ticket
+      jira-qa-label:
+        type: string
+        default: qa
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: false
@@ -460,8 +474,8 @@ jobs:
         run: test "$(cat qa-status.txt)" = pass
 
   jira-evidence:
-    # Posts one comment with both verdicts to the ticket in the branch name (ADR 0019). Off until the repository
-    # sets the variable JIRA_EVIDENCE to true. Same-repository PRs only, as qa-agent, so forks never see the token.
+    # Posts one comment with both verdicts to the ticket in the branch name (ADR 0019), or to its story's QA sub-task
+    # when jira-evidence-target is qa-subtask. Off until the repository sets the variable JIRA_EVIDENCE to true. Same-repository PRs only, as qa-agent, so forks never see the token.
     # The poster turns every Jira failure into a warning and exits 0, so this job never turns a PR red.
     needs: [changes, gate, apk, maestro-android, maestro-ios, qa-agent]
     if: ${{ !cancelled() && inputs.jira-evidence && (needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true') && github.event.pull_request.head.repo.full_name == github.repository }}
@@ -502,6 +516,8 @@ jobs:
           JIRA_BASE_URL: ${{ inputs.jira-base-url }}
           JIRA_EMAIL: ${{ inputs.jira-email }}
           JIRA_PROJECT_KEY: ${{ inputs.jira-project-key }}
+          JIRA_EVIDENCE_TARGET: ${{ inputs.jira-evidence-target }}
+          JIRA_QA_LABEL: ${{ inputs.jira-qa-label }}
           # The token is only visible to this step.
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           BRANCH: ${{ github.head_ref }}
