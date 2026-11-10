@@ -59,10 +59,10 @@ describe("native-cache seed-ios", () => {
     );
   });
 
-  it("fills the same cache device-checks reads, with no secret", () => {
+  it("fills the same cache device-checks reads, with no secret but the optional npm token", () => {
     expect(text).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+platform: ios\n/);
     expect(text).toContain("ci-workflows/actions/device-ios-app@");
-    expect(text).not.toMatch(/secrets\./);
+    expect(text.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
   });
 });
 
@@ -77,7 +77,7 @@ describe("ios-regression.yml", () => {
     expect(workflow).not.toMatch(/^ *pull_request(_target)?:/m);
   });
 
-  it("runs on the iOS runner only when one is named, one runtime at a time, with no secret", () => {
+  it("runs on the iOS runner only when one is named, one runtime at a time, with no secret but the npm token", () => {
     expect(regression).toContain("if: ${{ inputs.ios-runner != '' }}");
     expect(regression).toContain(
       "runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}",
@@ -86,8 +86,8 @@ describe("ios-regression.yml", () => {
     expect(regression).toMatch(/fail-fast: false\n/);
     expect(regression).toContain("runtime: ${{ fromJSON(inputs.runtimes) }}");
     expect(regression).toContain("IOS_RUNTIME: ${{ matrix.runtime }}");
-    expect(workflow).not.toMatch(/secrets\./);
-    expect(workflow).not.toMatch(/^ {4}secrets:/m);
+    expect(workflow.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
+    expect(workflow).toMatch(/^ {4}secrets:\n {6}NPM_AUTH_TOKEN:\n {8}required: false\n(?! {6}\S)/m);
   });
 
   it("runs every flow and lets only the summary fail the job", () => {

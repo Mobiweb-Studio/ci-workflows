@@ -244,11 +244,11 @@ describe("device-checks.yml", () => {
       expect(guard).toBeLessThan(text.indexOf("device-ios-app@"));
     });
 
-    it("keeps fork code and every secret off the runner, which can be a shared Mac", () => {
+    it("keeps fork code and every secret but the optional npm token off the runner, which can be a shared Mac", () => {
       expect(text).toContain(
         "github.event.pull_request.head.repo.full_name == github.repository",
       );
-      expect(text).not.toMatch(/secrets\./);
+      expect(text.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
       expect(text).not.toMatch(/^ {4}environment:/m);
     });
 

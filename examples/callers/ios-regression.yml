@@ -23,3 +23,6 @@ jobs:
       reference-vendor: ${{ vars.REFERENCE_VENDOR }}
       # A JSON array of iOS versions installed on the runner, such as '["27.1","26.4"]'. Empty means the newest.
       runtimes: ${{ vars.IOS_REGRESSION_RUNTIMES || '["newest"]' }}
+    # A repository secret, passed by name. Only a project whose .npmrc reads private packages needs it.
+    secrets:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}

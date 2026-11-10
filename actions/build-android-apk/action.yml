@@ -46,7 +46,12 @@ runs:
       # compiler_check=content is needed on CI, where file timestamps change on every checkout.
       shell: bash
       run: |
-        sudo apt-get install -y --no-install-recommends ccache
+        # The runner image's package lists can be stale ("Unable to locate package ccache"), so refresh them first,
+        # and only when ccache is missing.
+        if ! command -v ccache > /dev/null; then
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ccache
+        fi
         {
           echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
           echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
