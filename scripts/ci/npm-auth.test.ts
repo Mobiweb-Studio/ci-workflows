@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -45,5 +45,48 @@ describe("the npm token for private packages", () => {
     const text = read(".github", "workflows", name);
     const job = Object.values(jobs(text)).find((block) => block.includes("actions/device-apk@"));
     expect(job).toContain("NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}");
+  });
+
+  it.each(["device-checks.yml", "native-cache.yml", "ios-regression.yml"])(
+    "%s gives the token to every job that runs device-ios-app, and declares it as optional",
+    (name) => {
+      const text = read(".github", "workflows", name);
+      const iosJobs = Object.values(jobs(text)).filter((block) => block.includes("actions/device-ios-app@"));
+      expect(iosJobs.length).toBeGreaterThan(0);
+      for (const job of iosJobs) expect(job).toContain("NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}");
+      expect(text).toMatch(/^ {6}NPM_AUTH_TOKEN:\n {8}required: false$/m);
+    },
+  );
+});
+
+// The iOS runner can be a shared self-hosted Mac, so device-ios-app writes the line to a file under RUNNER_TEMP and
+// points pnpm at it, never touching the Mac's own ~/.npmrc.
+describe("the npm token on the iOS runner", () => {
+  const action = read("actions", "device-ios-app", "action.yml");
+  const IOS_LINE = `echo '//npm.pkg.github.com/:_authToken=\${NPM_AUTH_TOKEN}' > "$RUNNER_TEMP/npmrc"`;
+  const POINT = 'echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"';
+
+  it("writes the reference to a job-only user .npmrc before pnpm install, only when the token is set", () => {
+    const write = action.indexOf(IOS_LINE);
+    expect(write).toBeGreaterThan(-1);
+    expect(write).toBeLessThan(action.indexOf("- run: pnpm install"));
+    expect(action.indexOf(POINT)).toBeGreaterThan(write);
+    expect(action.indexOf(POINT)).toBeLessThan(action.indexOf("- run: pnpm install"));
+    const step = action.slice(action.lastIndexOf("- name:", write), write);
+    expect(step).toContain("if: ${{ env.NPM_AUTH_TOKEN != '' }}");
+    expect(action).not.toContain("~/.npmrc'");
+    expect(action).not.toMatch(/>>? ~\/\.npmrc/);
+  });
+
+  it("writes the reference, never the token, and leaves HOME alone", () => {
+    const home = mkdtempSync(join(tmpdir(), "npm-auth-home-"));
+    const temp = mkdtempSync(join(tmpdir(), "npm-auth-temp-"));
+    const githubEnv = join(temp, "github-env");
+    execFileSync("bash", ["-c", `${IOS_LINE}\n${POINT}`], {
+      env: { ...process.env, HOME: home, RUNNER_TEMP: temp, GITHUB_ENV: githubEnv, NPM_AUTH_TOKEN: "ghp_not-a-real-token" },
+    });
+    expect(readFileSync(join(temp, "npmrc"), "utf8")).toBe("//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}\n");
+    expect(readFileSync(githubEnv, "utf8")).toBe(`NPM_CONFIG_USERCONFIG=${temp}/npmrc\n`);
+    expect(existsSync(join(home, ".npmrc"))).toBe(false);
   });
 });

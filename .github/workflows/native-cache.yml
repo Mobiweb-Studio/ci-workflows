@@ -11,13 +11,13 @@ name: native-cache
 #   runner            The runner label. Default: the Blacksmith label the boilerplate uses.
 #   reference-vendor  The vendor folder to build; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
 #   ios-runner        The iOS runner, as in device-checks (a JSON array of labels or one hosted label). Empty, the
-#                     default, skips `seed-ios`. Pass the same value as the device-checks caller. The job gets no
-#                     secret, so it cannot install private packages.
+#                     default, skips `seed-ios`. Pass the same value as the device-checks caller.
 # Secrets
 #   NPM_AUTH_TOKEN    Optional. The caller passes it by name from its repository secrets. For a project with private
-#                     packages on GitHub Packages, the `seed` job sets it in its environment and the device-apk
-#                     action writes `//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}` to ~/.npmrc before
-#                     `pnpm install`. Without it the variable is empty and nothing changes.
+#                     packages on GitHub Packages, the `seed` and `seed-ios` jobs set it in their environment, and the
+#                     device-apk action writes `//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}` to ~/.npmrc
+#                     (device-ios-app to a user-level .npmrc under RUNNER_TEMP) before `pnpm install`. Without it the
+#                     variable is empty and nothing changes.
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts and vendors/<vendor>/vendor.json.
 # The caller owns the trigger (push to main with the project's native paths, and workflow_dispatch) and the
@@ -52,10 +52,13 @@ jobs:
           reference-vendor: ${{ inputs.reference-vendor }}
 
   seed-ios:
-    # The iOS twin of `seed`. No secret: the runner can be a shared self-hosted Mac.
+    # The iOS twin of `seed`. The runner can be a shared self-hosted Mac, so its only secret is the optional npm
+    # token, which device-ios-app writes to a user-level .npmrc under RUNNER_TEMP, never to the Mac's own ~/.npmrc.
     if: ${{ inputs.ios-runner != '' }}
     runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}
     timeout-minutes: 60
+    env:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main

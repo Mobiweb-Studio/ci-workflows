@@ -44,9 +44,10 @@ name: device-checks
 #   jira-qa-label     The label that marks the story's QA sub-task when `jira-evidence-target` is `qa-subtask`.
 #                     Default: qa.
 # Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job),
-# JIRA_API_TOKEN (the `jira-evidence` job) and optionally NPM_AUTH_TOKEN (the `apk` job's `pnpm install`, for a project
-# with private packages on GitHub Packages: the device-apk action writes its reference to ~/.npmrc; without it the
-# variable is empty and nothing changes). The jobs also declare the environments `qa-agent` and `jira-evidence`,
+# JIRA_API_TOKEN (the `jira-evidence` job) and optionally NPM_AUTH_TOKEN (the `pnpm install` of the `apk` and
+# `maestro-ios` jobs, for a project with private packages on GitHub Packages: the device-apk action writes its reference
+# to ~/.npmrc, and device-ios-app to a user-level .npmrc under RUNNER_TEMP; without it the variable is empty and
+# nothing changes). The jobs also declare the environments `qa-agent` and `jira-evidence`,
 # which gate them (reviewers, branch rules), but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json
@@ -263,9 +264,12 @@ jobs:
     outputs:
       app-url: ${{ steps.app-upload.outputs.artifact-url }}
       app-source: ${{ steps.app.outputs.source }}
+    # The only secret is the optional npm token, which the device-ios-app action's `pnpm install` reads from the
+    # job's env and writes to a user-level .npmrc under RUNNER_TEMP, never to the Mac's own ~/.npmrc.
     env:
       MAESTRO_VERSION: 2.10.0
       MAESTRO_PLATFORM: ios
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main

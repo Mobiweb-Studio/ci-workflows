@@ -14,7 +14,12 @@ name: ios-regression
 #   runtimes          A JSON array of iOS versions, such as '["27.1","26.4"]', each installed on the runner;
 #                     "newest" is the newest one installed. Default: '["newest"]'. A version the runner lacks fails
 #                     its job with the list of what is installed.
-# It takes no secret.
+# Secrets
+#   NPM_AUTH_TOKEN    Optional. The caller passes it by name from its repository secrets. For a project with private
+#                     packages on GitHub Packages, the job sets it in its environment and the device-ios-app action
+#                     writes `//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}` to a user-level .npmrc under
+#                     RUNNER_TEMP, never to the Mac's own ~/.npmrc, before `pnpm install`. Without it the variable is
+#                     empty and nothing changes.
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json,
 # .maestro/flows and vendors/<vendor>/maestro.
@@ -33,6 +38,9 @@ on:
       runtimes:
         type: string
         default: '["newest"]'
+    secrets:
+      NPM_AUTH_TOKEN:
+        required: false
 
 jobs:
   regression:
@@ -52,6 +60,7 @@ jobs:
       MAESTRO_PLATFORM: ios
       MAESTRO_ALL_FLOWS: "true"
       IOS_RUNTIME: ${{ matrix.runtime }}
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - name: Require a schedule or workflow_dispatch event
         env:

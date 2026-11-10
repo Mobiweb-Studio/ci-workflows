@@ -25,4 +25,14 @@ describe("the CI device-check APK build", () => {
       /echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "\$GITHUB_ENV"/,
     );
   });
+
+  // A runner image with stale package lists fails a bare install with "Unable to locate package ccache".
+  it("refreshes the package lists before it installs ccache, and installs it only when it is missing", () => {
+    const install = action.indexOf("apt-get install");
+    expect(install).toBeGreaterThan(-1);
+    const update = action.indexOf("apt-get update");
+    expect(update).toBeGreaterThan(-1);
+    expect(update).toBeLessThan(install);
+    expect(action.slice(action.lastIndexOf("if ! command -v ccache", update), update)).toContain("command -v ccache");
+  });
 });

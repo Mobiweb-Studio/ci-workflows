@@ -24,6 +24,18 @@ runs:
       run: |
         echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
         echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
+    - name: Put the npm token's reference in a user-level .npmrc for this job only
+      # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line goes
+      # in a user-level one, as in device-apk. The runner can be a shared self-hosted Mac, so it is a file under
+      # RUNNER_TEMP, which the runner empties after each job, named by NPM_CONFIG_USERCONFIG (pnpm reads it instead
+      # of ~/.npmrc), and the Mac's own ~/.npmrc is never touched. The single quotes write the reference, never the
+      # token. The later `pnpm install` in build-ios-simulator-app reads the same file.
+      if: ${{ env.NPM_AUTH_TOKEN != '' }}
+      shell: bash
+      run: |
+        # shellcheck disable=SC2016
+        echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' > "$RUNNER_TEMP/npmrc"
+        echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
     - run: pnpm install --frozen-lockfile
       shell: bash
     - name: Compute the native fingerprint and the cache key
