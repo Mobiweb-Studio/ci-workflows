@@ -71,13 +71,13 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v7
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.8.1
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@v1.8.1
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
           platform: ios
       - id: app
-        uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main
+        uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@v1.8.1
       - name: Create a simulator on iOS ${{ matrix.runtime }} and install the app
         env:
           APP_PATH: ${{ steps.app.outputs.app-path }}
