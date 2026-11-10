@@ -39,6 +39,18 @@ describe("the iOS device-check app", () => {
     expect(deviceApp).toContain("--platform ios --source-app");
   });
 
+  it("builds the app ad-hoc signed, so it carries its entitlements and can use the Keychain", () => {
+    expect(build).toContain("CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES");
+    expect(build).not.toMatch(/^\s+-derivedDataPath .*CODE_SIGNING_ALLOWED=NO/m);
+  });
+
+  it("signs a repacked app again ad-hoc, keeping its entitlements", () => {
+    const repack = deviceApp.indexOf("repack-app@");
+    const sign = deviceApp.indexOf('codesign --force --sign - --preserve-metadata=entitlements "$app"');
+    expect(sign).toBeGreaterThan(repack);
+    expect(sign).toBeLessThan(deviceApp.indexOf("id: build"));
+  });
+
   it("pins the repack and fingerprint tools to the versions the APK uses", () => {
     const apk = read("actions", "device-apk", "action.yml");
     for (const tool of ["@expo/repack-app", "@expo/fingerprint"]) {

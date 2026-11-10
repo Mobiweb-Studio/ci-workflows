@@ -55,7 +55,7 @@ describe("device-apk-key", () => {
   it("prints an iOS simulator key that never matches an Android one", () => {
     const ios = key("default", JSON.stringify({ hash: hashA }), "ios");
     expect(ios.status).toBe(0);
-    expect(ios.stdout).toBe(`device-app-ios-v1-simulator-default-${hashA}\n`);
+    expect(ios.stdout).toBe(`device-app-ios-v2-simulator-default-${hashA}\n`);
     expect(key("acme", JSON.stringify({ hash: hashA }), "ios").stdout).not.toBe(ios.stdout);
   });
 
