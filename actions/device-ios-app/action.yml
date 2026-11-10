@@ -56,13 +56,15 @@ runs:
       if: ${{ steps.cache.outputs.cache-hit == 'true' }}
       shell: bash
       run: |
-        # A simulator app needs no signing, so nothing here is secret.
+        # The cached app is ad-hoc signed (build-ios-simulator-app). Repacking changes its JS bundle, so it is signed
+        # again ad-hoc, keeping the entitlements the Keychain needs. No certificate is used, so nothing here is secret.
         rm -rf "$RUNNER_TEMP/source-app/unzipped" "$RUNNER_TEMP/device-app"
         mkdir -p "$RUNNER_TEMP/source-app/unzipped" "$RUNNER_TEMP/device-app"
         ditto -x -k "$RUNNER_TEMP/source-app/app.zip" "$RUNNER_TEMP/source-app/unzipped"
         source_app=$(ls -d "$RUNNER_TEMP/source-app/unzipped"/*.app | head -1)
         app="$RUNNER_TEMP/device-app/$(basename "$source_app")"
         npx --yes @expo/repack-app@0.10.4 --platform ios --source-app "$source_app" --output "$app"
+        codesign --force --sign - --preserve-metadata=entitlements "$app"
         echo "app-path=$app" >> "$GITHUB_OUTPUT"
     - name: Build the app, none was cached for this fingerprint
       id: build

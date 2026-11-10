@@ -3,7 +3,8 @@ description: >
   Builds the app for the iOS simulator from the commit under test, on a macOS runner with Xcode and CocoaPods
   installed: installs the project's dependencies, generates the iOS project
   for the vendor in APP_VARIANT (set by device-check-env), installs the pods and builds the Release configuration
-  for the simulator, unsigned. Needs no secret and no Apple account. Outputs the path of the .app.
+  for the simulator, ad-hoc signed ("Sign to Run Locally") so the app carries the entitlements prebuild generates
+  and can use the Keychain. Needs no secret, no certificate and no Apple account. Outputs the path of the .app.
 outputs:
   app-path:
     description: The built .app, relative to the workspace.
@@ -33,13 +34,17 @@ runs:
       run: pod install
     - name: Build the Release app for the simulator
       id: build
+      # Ad-hoc signed, not CODE_SIGNING_ALLOWED=NO: an unsigned app has no entitlements, so the simulator's Keychain
+      # refuses every write (errSecMissingEntitlement) and expo-secure-store fails. The identity `-` needs no
+      # certificate, team or profile, as `expo run:ios` does locally.
       shell: bash
       run: |
         workspace=$(ls -d ios/*.xcworkspace | head -1)
         scheme=$(basename "$workspace" .xcworkspace)
         xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
           -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-          -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO -quiet
+          -derivedDataPath build/ios \
+          CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES -quiet
         app=$(ls -d build/ios/Build/Products/Release-iphonesimulator/*.app | head -1)
         echo "Built $app"
         echo "app-path=$app" >> "$GITHUB_OUTPUT"

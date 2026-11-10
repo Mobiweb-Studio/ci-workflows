@@ -13,7 +13,8 @@ import { readFileSync } from "node:fs";
 // Bump when the way an app is built changes (the architecture, the build type, the SDK), so old ones are not reused.
 const KEY_VERSION = "v1";
 const ARCH = "x86_64";
-const IOS_KEY_VERSION = "v1";
+// v2: the simulator app is ad-hoc signed with its entitlements; a v1 app was unsigned and cannot use the Keychain.
+const IOS_KEY_VERSION = "v2";
 
 function fail(message) {
   process.stderr.write(`device-apk-key: ${message}\n`);
