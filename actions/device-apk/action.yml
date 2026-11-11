@@ -40,6 +40,14 @@ runs:
         echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
     - run: pnpm install --frozen-lockfile
       shell: bash
+    - name: Switch crash reporting, the source map upload and the real sign-in off
+      # Set before the repack, which regenerates the app config from this job's environment: set only in
+      # build-android-apk, they reached a built APK but not a repacked one. See build-android-apk for why.
+      shell: bash
+      run: |
+        echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
+        echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
+        echo "AUTH_SOURCE=mock" >> "$GITHUB_ENV"
     - name: Choose the reference vendor
       shell: bash
       env:

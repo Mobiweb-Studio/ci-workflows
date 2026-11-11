@@ -13,8 +13,9 @@ describe("the iOS device-check app", () => {
   it.each([
     ["device-ios-app", deviceApp],
     ["build-ios-simulator-app", build],
-  ])("%s switches crash reporting and the source map upload off, as the CI APK does", (_name, action) => {
+  ])("%s switches crash reporting, the source map upload and the real sign-in off, as the CI APK does", (_name, action) => {
     expect(action).toMatch(/echo "CRASH_REPORTING=off" >> "\$GITHUB_ENV"/);
+    expect(action).toMatch(/echo "AUTH_SOURCE=mock" >> "\$GITHUB_ENV"/);
     expect(action).toMatch(/echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "\$GITHUB_ENV"/);
   });
 

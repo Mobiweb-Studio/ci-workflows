@@ -13,12 +13,14 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Switch crash reporting and the source map upload off, as for the CI APK
-      # The device-check app is built with no APP_ENV and no Sentry upload token (see build-android-apk).
+    - name: Switch crash reporting, the source map upload and the real sign-in off, as for the CI APK
+      # The device-check app is built with no APP_ENV and no Sentry upload token, and keeps the mock sign-in
+      # (see build-android-apk).
       shell: bash
       run: |
         echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
         echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
+        echo "AUTH_SOURCE=mock" >> "$GITHUB_ENV"
     - run: pnpm install --frozen-lockfile
       shell: bash
     - name: Generate the iOS project
