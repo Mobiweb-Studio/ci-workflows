@@ -84,9 +84,37 @@ describe("jira-evidence-merge.yml", () => {
     expect(post).not.toContain("continue-on-error");
   });
 
-  it("gives the Jira token to the poster step alone", () => {
-    expect(job.match(/secrets\./g)).toHaveLength(1);
+  it("gives the Jira token and the Microsoft secrets to the poster step alone", () => {
     const post = job.slice(job.lastIndexOf("- name:"));
-    expect(post).toContain("JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}");
+    const secrets = ["JIRA_API_TOKEN", "MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET"];
+    expect(job.match(/secrets\./g)).toHaveLength(secrets.length);
+    for (const secret of secrets) {
+      expect(post).toContain(`${secret}: \${{ secrets.${secret} }}`);
+    }
+  });
+
+  it("takes the evidence storage and the OneDrive library as optional inputs whose default keeps Jira attachments", () => {
+    expect(workflow).toMatch(
+      /\n {6}jira-evidence-storage:\n {8}type: string\n {8}default: jira\n/,
+    );
+    for (const input of ["onedrive-drive-id", "onedrive-folder"]) {
+      expect(workflow).toMatch(
+        new RegExp(`\\n {6}${input}:\\n {8}type: string\\n {8}default: ""\\n`),
+      );
+    }
+    for (const secret of ["MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET"]) {
+      expect(workflow).toMatch(
+        new RegExp(`\\n {6}${secret}:\\n {8}required: false\\n`),
+      );
+    }
+    const poster = job.slice(job.lastIndexOf("- name:"));
+    for (const line of [
+      "JIRA_EVIDENCE_STORAGE: ${{ inputs.jira-evidence-storage }}",
+      "MS_DRIVE_ID: ${{ inputs.onedrive-drive-id }}",
+      "ONEDRIVE_FOLDER: ${{ inputs.onedrive-folder }}",
+      "PR_NUMBER: ${{ github.event.pull_request.number }}",
+    ]) {
+      expect(poster).toContain(line);
+    }
   });
 });

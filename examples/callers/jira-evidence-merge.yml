@@ -20,6 +20,14 @@ jobs:
       jira-project-key: ${{ vars.JIRA_PROJECT_KEY }}
       # To post to each story's sub-task labelled qa instead of the branch's ticket, add:
       # jira-evidence-target: qa-subtask
-    # A repository secret, passed by name. The shared job still declares the jira-evidence environment as a gate.
+      # Empty attaches the screenshots to Jira; onedrive stores every run's evidence in a SharePoint or OneDrive
+      # library and links the folder in the comment.
+      jira-evidence-storage: ${{ vars.JIRA_EVIDENCE_STORAGE }}
+      onedrive-drive-id: ${{ vars.MS_DRIVE_ID }}
+      onedrive-folder: ${{ github.event.repository.name }}/QA evidence
+    # Repository secrets, passed by name. The shared job still declares the jira-evidence environment as a gate.
     secrets:
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      MS_TENANT_ID: ${{ secrets.MS_TENANT_ID }}
+      MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+      MS_CLIENT_SECRET: ${{ secrets.MS_CLIENT_SECRET }}
