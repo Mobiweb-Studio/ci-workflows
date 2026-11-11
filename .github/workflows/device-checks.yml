@@ -43,8 +43,18 @@ name: device-checks
 #                     never creates or edits an issue.
 #   jira-qa-label     The label that marks the story's QA sub-task when `jira-evidence-target` is `qa-subtask`.
 #                     Default: qa.
+#   jira-evidence-storage
+#                     Where the evidence files go: `jira`, the default (or empty), attaches the screenshots to the
+#                     ticket; `onedrive` uploads the screenshots and qa-report.json of every run to a SharePoint or
+#                     OneDrive library with Microsoft Graph, and the comment links the folder with a view-only link
+#                     for the organization. Needs the secrets MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (an
+#                     app registration with Sites.Selected, granted write on the one site).
+#   onedrive-drive-id The document library's drive id, when `jira-evidence-storage` is `onedrive`.
+#   onedrive-folder   The folder in that library that holds the evidence, such as `ICligo/QA evidence`. Under it:
+#                     <story>/<ticket>/PR-<n>/<run id>-attempt-<k>/, and PR-<n>/merged/ on merge.
 # Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job),
-# JIRA_API_TOKEN (the `jira-evidence` job) and optionally NPM_AUTH_TOKEN (the `pnpm install` of the `apk` and
+# JIRA_API_TOKEN (the `jira-evidence` job), MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (the same job, when
+# jira-evidence-storage is onedrive) and optionally NPM_AUTH_TOKEN (the `pnpm install` of the `apk` and
 # `maestro-ios` jobs, for a project with private packages on GitHub Packages: the device-apk action writes its reference
 # to ~/.npmrc, and device-ios-app to a user-level .npmrc under RUNNER_TEMP; without it the variable is empty and
 # nothing changes). The jobs also declare the environments `qa-agent` and `jira-evidence`,
@@ -110,10 +120,25 @@ on:
       jira-qa-label:
         type: string
         default: qa
+      jira-evidence-storage:
+        type: string
+        default: jira
+      onedrive-drive-id:
+        type: string
+        default: ""
+      onedrive-folder:
+        type: string
+        default: ""
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: false
       JIRA_API_TOKEN:
+        required: false
+      MS_TENANT_ID:
+        required: false
+      MS_CLIENT_ID:
+        required: false
+      MS_CLIENT_SECRET:
         required: false
       NPM_AUTH_TOKEN:
         required: false
@@ -524,6 +549,15 @@ jobs:
           JIRA_QA_LABEL: ${{ inputs.jira-qa-label }}
           # The token is only visible to this step.
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_EVIDENCE_STORAGE: ${{ inputs.jira-evidence-storage }}
+          MS_DRIVE_ID: ${{ inputs.onedrive-drive-id }}
+          ONEDRIVE_FOLDER: ${{ inputs.onedrive-folder }}
+          MS_TENANT_ID: ${{ secrets.MS_TENANT_ID }}
+          MS_CLIENT_ID: ${{ secrets.MS_CLIENT_ID }}
+          MS_CLIENT_SECRET: ${{ secrets.MS_CLIENT_SECRET }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           BRANCH: ${{ github.head_ref }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
