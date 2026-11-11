@@ -34,13 +34,16 @@ runs:
         VENDOR="${REFERENCE_VENDOR:-default}"
         echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
         echo "APP_ID=$(node -p "require('./vendors/$VENDOR/vendor.json').identity.androidPackage")" >> "$GITHUB_ENV"
-    - name: Keep Sentry out of the device checks
+    - name: Keep Sentry and the real sign-in out of the device checks
       # The APK is built with no APP_ENV, so a reference vendor with a Sentry DSN would report its test
       # runs as production. It also has no upload token to give the Sentry plugin (ADR 0021).
+      # AUTH_SOURCE=mock keeps a project's mock sign-in, whose fixed answers the Maestro flows rely on,
+      # when its vendor signs in for real; a project that does not read it is unaffected.
       shell: bash
       run: |
         echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
         echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
+        echo "AUTH_SOURCE=mock" >> "$GITHUB_ENV"
     - name: Set up ccache for the C++ build
       # Gradle cannot cache React Native's C++ compilation, so ccache wraps the compiler through CMake.
       # compiler_check=content is needed on CI, where file timestamps change on every checkout.
