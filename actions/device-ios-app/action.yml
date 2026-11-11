@@ -69,7 +69,7 @@ runs:
     - name: Build the app, none was cached for this fingerprint
       id: build
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-      uses: Mobiweb-Studio/ci-workflows/actions/build-ios-simulator-app@main
+      uses: Mobiweb-Studio/ci-workflows/actions/build-ios-simulator-app@v1.9.0
     - name: Keep the new app for the next runs with this fingerprint
       id: keep
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
