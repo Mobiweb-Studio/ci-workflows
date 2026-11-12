@@ -54,17 +54,17 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@v7
-      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@v1.12.0
       - name: Put the project's Maestro variables in the environment
         # MAESTRO_ENV holds test accounts and the like (scripts/ci/maestro-env.sh): each value is masked first.
         env:
           MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
         run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" export
       - id: apk
-        uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
+        uses: Mobiweb-Studio/ci-workflows/actions/device-apk@v1.12.0
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
-      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
+      - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@v1.12.0
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
       - name: Enable KVM for the emulator
