@@ -22,6 +22,10 @@
 //   <ONEDRIVE_FOLDER>/<story>/<ticket>/PR-<PR_NUMBER>/merged/                          the merge mode
 // Inside the folder the files are named for people (ADR 0022 in ICligo): summary.md (each flow's result per platform),
 // qa-report.json, android/<flow>/… and ios/<flow>/… (Maestro's screenshots), qa-agent/… (the QA agent's).
+// The run comment lists each Maestro flow in a table: its title linked to its file at the PR's head (SOURCE_URL, such as
+// https://github.com/<owner>/<repo>/blob/<sha>, when set), its result per platform, and the acceptance criteria its
+// tags name (`<KEY>-AC<n>`, such as `ICLIGO-22-AC4`). The flows come from `maestro-output/flows.tsv`, which
+// run-maestro.sh writes; an older artifact without it keeps only the counts.
 // It needs MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET (an app registration with Sites.Selected, granted write on
 // the one site) and MS_DRIVE_ID. MS_LOGIN_URL and MS_GRAPH_URL replace Microsoft's hosts in tests only; no workflow
 // sets them.
@@ -83,6 +87,7 @@ const evidenceDir = existsSync(process.env.EVIDENCE_DIR)
   ? realpathSync(process.env.EVIDENCE_DIR)
   : resolve(process.env.EVIDENCE_DIR);
 const prUrl = process.env.PR_URL ?? "";
+const sourceUrl = (process.env.SOURCE_URL ?? "").replace(/\/+$/, "");
 const runUrl = process.env.RUN_URL ?? "";
 
 const TARGETS = ["branch-ticket", "qa-subtask"];
@@ -424,6 +429,33 @@ function storedName(name) {
 // Each flow's result per platform, from Maestro's JUnit reports, as summary.md in a temporary folder. None when the
 // run has no report.
 function summaryFile() {
+  const flows = flowRows();
+  if (flows.length > 0) {
+    const platforms = Object.values(PLATFORM_FOLDERS).filter((platform) =>
+      flows.some((flow) => platform in flow.results),
+    );
+    const path = join(mkdtempSync(join(tmpdir(), "evidence-")), "summary.md");
+    writeFileSync(
+      path,
+      [
+        "# Device-check run",
+        "",
+        ...(runUrl ? [`Run: ${runUrl}`, ""] : []),
+        `| Flow | ${platforms.join(" | ")} | Acceptance criteria |`,
+        `|---|${platforms.map(() => "---|").join("")}---|`,
+        ...flows.map(
+          (flow) =>
+            `| ${sourceUrl ? `[${flow.title}](${sourceUrl}/${flow.path})` : flow.title} | ${platforms
+              .map((platform) => flow.results[platform] ?? "—")
+              .join(" | ")} | ${flow.acs.join(", ") || "—"} |`,
+        ),
+        "",
+        "Screenshots: `android/<flow>/` and `ios/<flow>/`; the QA agent's in `qa-agent/`.",
+        "",
+      ].join("\n"),
+    );
+    return [path];
+  }
   const rows = [];
   for (const [folder, platform] of Object.entries(PLATFORM_FOLDERS)) {
     const reports = filesIn(folder).filter((file) =>
@@ -542,6 +574,31 @@ const bullets = (items) => ({
   })),
 });
 
+const linkText = (label, href) => ({
+  type: "text",
+  text: label,
+  marks: [{ type: "link", attrs: { href } }],
+});
+const cell = (type, ...content) => ({
+  type,
+  attrs: {},
+  content: [paragraph(...content)],
+});
+const table = (header, rows) => ({
+  type: "table",
+  attrs: { isNumberColumnEnabled: false, layout: "default" },
+  content: [
+    {
+      type: "tableRow",
+      content: header.map((title) => cell("tableHeader", text(title))),
+    },
+    ...rows.map((row) => ({
+      type: "tableRow",
+      content: row.map((content) => cell("tableCell", ...content)),
+    })),
+  ],
+});
+
 function links() {
   const content = [];
   if (prUrl) content.push(text("PR: "), link(prUrl));
@@ -585,6 +642,87 @@ function maestroCounts(folder) {
     }
   }
   return { passed: tests - failures, failed: failures };
+}
+
+// One flow's result in one artifact folder, from its own JUnit report (run-maestro.sh writes one per flow).
+function flowResult(folder, name) {
+  const report = filesIn(folder).find(
+    (file) => basename(file) === `maestro-report-${name}.xml`,
+  );
+  if (!report) return "no report";
+  const xml = readFileSync(join(evidenceDir, folder, report), "utf8");
+  let tests = 0;
+  let failures = 0;
+  for (const suite of xml.matchAll(/<testsuite\b[^>]*>/g)) {
+    tests += Number(/\btests="(\d+)"/.exec(suite[0])?.[1] ?? 0);
+    failures += Number(
+      /\b(?:failures|errors)="(\d+)"/.exec(suite[0])?.[1] ?? 0,
+    );
+  }
+  if (tests === 0) return "no report";
+  return failures > 0 ? "failed" : "passed";
+}
+
+const AC_TAG = /^([A-Z][A-Z0-9]*-\d+)-AC(\d+)$/;
+
+// The acceptance criteria a flow's tags name, as "ICLIGO-22 AC 4".
+const acceptanceCriteria = (tags) =>
+  tags
+    .map((tag) => AC_TAG.exec(tag))
+    .filter(Boolean)
+    .map(([, key, number]) => `${key} AC ${number}`);
+
+// Every flow that ran on either platform, from run-maestro.sh's flows.tsv, with its result per platform. Empty when
+// no artifact has the manifest.
+function flowRows() {
+  const rows = new Map();
+  for (const [folder, platform] of Object.entries(PLATFORM_FOLDERS)) {
+    const manifest = filesIn(folder).find(
+      (file) => basename(file) === "flows.tsv",
+    );
+    if (!manifest) continue;
+    const lines = readFileSync(join(evidenceDir, folder, manifest), "utf8")
+      .split("\n")
+      .filter(Boolean);
+    for (const line of lines) {
+      const [name, path, title, tags = ""] = line.split("\t");
+      if (!name || !path) continue;
+      const row = rows.get(path) ?? {
+        name,
+        path,
+        title: title || name,
+        acs: acceptanceCriteria(tags.split(",").filter(Boolean)),
+        results: {},
+      };
+      row.results[platform] = flowResult(folder, name);
+      rows.set(path, row);
+    }
+  }
+  return [...rows.values()].sort((a, b) => a.path.localeCompare(b.path));
+}
+
+const RESULT_WORDS = { passed: "✅ passed", failed: "❌ failed" };
+
+// The flows as a table: the title linked to the file, one column per platform that ran, and the ACs.
+function flowTable(platforms) {
+  const rows = flowRows();
+  if (rows.length === 0) return [];
+  const titleCell = (row) =>
+    sourceUrl
+      ? [linkText(row.title, `${sourceUrl}/${row.path}`)]
+      : [text(row.title)];
+  return [
+    table(
+      ["Flow", ...platforms.map(([, label]) => label), "Acceptance criteria"],
+      rows.map((row) => [
+        titleCell(row),
+        ...platforms.map(([platform]) => [
+          text(RESULT_WORDS[row.results[platform]] ?? row.results[platform] ?? "—"),
+        ]),
+        [text(row.acs.length > 0 ? row.acs.join(", ") : "—")],
+      ]),
+    ),
+  ];
 }
 
 // Keeps a path only when it really is a .png inside the evidence folder, so a path written in qa-report.json
@@ -783,6 +921,10 @@ async function postRun() {
     ...(iosRan(iosResult)
       ? maestroVerdict("Maestro on iOS", "maestro-ios", iosResult)
       : []),
+    ...flowTable([
+      ["android", "Android"],
+      ...(iosRan(iosResult) ? [["ios", "iOS"]] : []),
+    ]),
     ...evidence,
     ...links(),
   ]);

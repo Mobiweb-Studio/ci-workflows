@@ -314,6 +314,60 @@ describe("jira-evidence", () => {
     expect(text).toContain("1 flows passed, 0 failed");
   });
 
+  it("lists each flow in a table linked to its file, with its result per platform and the ACs its tags name", async () => {
+    withQa(passingReport);
+    write(
+      "maestro-android/maestro-output/flows.tsv",
+      [
+        "happy-path\t.maestro/login/happy-path.yml\tLogin happy path\tsmoke,login,ICLIGO-19-AC9,ICLIGO-19-AC10",
+        "offline\t.maestro/login/offline.yml\toffline\tlogin,android-only",
+        "",
+      ].join("\n"),
+    );
+    write("maestro-android/maestro-report-happy-path.xml", junit(1, 0));
+    write("maestro-android/maestro-report-offline.xml", junit(1, 1));
+    write(
+      "maestro-ios/maestro-output/flows.tsv",
+      "happy-path\t.maestro/login/happy-path.yml\tLogin happy path\tsmoke,login,ICLIGO-19-AC9,ICLIGO-19-AC10\n",
+    );
+    write("maestro-ios/maestro-report-happy-path.xml", junit(1, 0));
+    const result = await run("run", {
+      MAESTRO_IOS_RESULT: "success",
+      SOURCE_URL: "https://github.com/acme/app/blob/abc123/",
+    });
+    expect(result.status).toBe(0);
+    // The test server keeps bodies as latin1, for the attachments; the comment is UTF-8 JSON.
+    const body = JSON.parse(Buffer.from(comments()[0].body, "latin1").toString("utf8")).body;
+    const tableNode = body.content.find((node: { type: string }) => node.type === "table");
+    const rows = tableNode.content.map((row: unknown) => texts(row));
+    expect(rows).toEqual([
+      ["Flow", "Android", "iOS", "Acceptance criteria"],
+      [
+        "Login happy path",
+        "https://github.com/acme/app/blob/abc123/.maestro/login/happy-path.yml",
+        "✅ passed",
+        "✅ passed",
+        "ICLIGO-19 AC 9, ICLIGO-19 AC 10",
+      ],
+      [
+        "offline",
+        "https://github.com/acme/app/blob/abc123/.maestro/login/offline.yml",
+        "❌ failed",
+        "—",
+        "—",
+      ],
+    ]);
+  });
+
+  it("keeps only the counts when the artifacts have no flow list, and leaves out iOS when it did not run", async () => {
+    withQa(passingReport);
+    write("maestro-android/maestro-report-1.xml", junit(3, 0));
+    await run("run");
+    // The test server keeps bodies as latin1, for the attachments; the comment is UTF-8 JSON.
+    const body = JSON.parse(Buffer.from(comments()[0].body, "latin1").toString("utf8")).body;
+    expect(body.content.some((node: { type: string }) => node.type === "table")).toBe(false);
+  });
+
   it("attaches the iOS screenshots when only the iOS check failed", async () => {
     withQa(passingReport);
     write("maestro-android/maestro-report-1.xml", junit(3, 0));

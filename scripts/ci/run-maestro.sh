@@ -18,6 +18,10 @@
 # MAESTRO_ALL_FLOWS=true it runs every flow, tagged or not, which the iOS regression uses to find the
 # flows that could be tagged.
 #
+# Each flow that runs gets a line in `maestro-output/flows.tsv`: its file name without `.yml`, its path, its `name:`
+# (the file name when it has none) and its tags, separated by tabs (tags by commas). The Jira evidence reads it to
+# list the flows with links to their files and the acceptance criteria their tags name.
+#
 # MAESTRO_TAGS (tags separated by spaces or commas) keeps only the flows with at least one of them; empty runs them
 # all. MAESTRO_EXCLUDE_TAGS drops the flows with any of them, as the PR checks do with `nightly`.
 set -euo pipefail
@@ -63,6 +67,29 @@ has_any_tag() {
   return 1
 }
 
+# The flow's `name:` and its tags, from the config section before `---`, separated by the unit separator (0x1f):
+# a tab would be read as whitespace, which drops an empty name.
+flow_details() {
+  awk '
+    /^---/ { exit }
+    /^name:/ { value = $0; sub(/^name:[ \t]*/, "", value); name = value; listing = 0; next }
+    /^tags:/ {
+      value = $0; sub(/^tags:[ \t]*/, "", value)
+      if (value ~ /^\[/) { gsub(/[][ \t]/, "", value); tags = value; listing = 0 } else { listing = 1 }
+      next
+    }
+    listing && /^[ \t]*-[ \t]*/ {
+      value = $0; sub(/^[ \t]*-[ \t]*/, "", value); gsub(/[ \t]/, "", value)
+      tags = (tags == "" ? value : tags "," value); next
+    }
+    { listing = 0 }
+    END { printf "%s\037%s\n", name, tags }
+  ' "$1"
+}
+
+mkdir -p maestro-output
+: > maestro-output/flows.tsv
+
 failed=0
 ran=0
 for flow in ${flows[@]+"${flows[@]}"}; do
@@ -91,6 +118,8 @@ for flow in ${flows[@]+"${flows[@]}"}; do
     maestro test -e APP_ID="$APP_ID" "$flow" --format junit --output "maestro-report-$name.xml" \
       --test-output-dir "$output" || failed=1
   fi
+  IFS=$'\037' read -r title tags <<< "$(flow_details "$flow")" || true
+  printf '%s\t%s\t%s\t%s\n' "$name" "$flow" "${title:-$name}" "$tags" >> maestro-output/flows.tsv
   ran=$((ran + 1))
 done
 
