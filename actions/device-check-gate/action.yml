@@ -23,6 +23,11 @@ outputs:
   reason:
     description: Why the check runs or is skipped (decide).
     value: ${{ steps.gate.outputs.reason }}
+  tags:
+    description: >
+      The Maestro flow tags the change affects, separated by spaces; empty means every flow (decide, check maestro).
+      Read from the project's optional `.maestro/IMPACT` (scripts/ci/device-check-mode.mjs).
+    value: ${{ steps.gate.outputs.tags }}
   base-ref:
     description: The pull request's base branch, read now.
     value: ${{ steps.gate.outputs.base-ref }}
@@ -59,6 +64,9 @@ runs:
         echo "base-ref=$BASE_REF" >> "$GITHUB_OUTPUT"
         if [ "$COMMAND" = "decide" ]; then
           node "$GITHUB_ACTION_PATH/../../scripts/ci/device-check-mode.mjs" decide | tee -a "$GITHUB_OUTPUT"
+          if [ "$CHECK" = "maestro" ]; then
+            node "$GITHUB_ACTION_PATH/../../scripts/ci/device-check-mode.mjs" tags | tee -a "$GITHUB_OUTPUT"
+          fi
         elif [ "$COMMAND" = "comment" ]; then
           node "$GITHUB_ACTION_PATH/../../scripts/ci/device-check-mode.mjs" comment > "$RUNNER_TEMP/mode-comment.md"
           echo "comment-file=$RUNNER_TEMP/mode-comment.md" >> "$GITHUB_OUTPUT"

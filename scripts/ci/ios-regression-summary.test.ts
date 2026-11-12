@@ -74,4 +74,17 @@ describe("ios-regression-summary", () => {
     const { summary } = run();
     expect(summary).toContain("| `.maestro/flows/lookalike.yml` | no | passed |");
   });
+
+  it("reads the feature folders when the project has no .maestro/flows, skipping the shared subflows", () => {
+    rmSync(join(dir, ".maestro", "flows"), { recursive: true });
+    for (const folder of ["login", "_subflows"]) mkdirSync(join(dir, ".maestro", folder));
+    flow(".maestro/login/happy-path.yml", "tags: [ios]\n");
+    flow(".maestro/_subflows/open-login.yml", "");
+    report("happy-path", 1, 0);
+    const { status, summary } = run();
+    expect(status).toBe(0);
+    expect(summary).toContain("| `.maestro/login/happy-path.yml` | yes | passed |");
+    expect(summary).not.toContain("open-login");
+  });
 });
+

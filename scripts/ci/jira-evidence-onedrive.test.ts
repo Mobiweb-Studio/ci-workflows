@@ -212,8 +212,8 @@ describe("jira-evidence with OneDrive storage", () => {
     expect(form.get("scope")).toBe("https://graph.microsoft.com/.default");
 
     expect(uploads().map((request) => request.url).sort()).toEqual([
-      `${RUN_FOLDER}/qa-agent/qa-artifacts/01-home.png:/content?@microsoft.graph.conflictBehavior=replace`,
-      `${RUN_FOLDER}/qa-report/qa-report.json:/content?@microsoft.graph.conflictBehavior=replace`,
+      `${RUN_FOLDER}/qa-agent/01-home.png:/content?@microsoft.graph.conflictBehavior=replace`,
+      `${RUN_FOLDER}/qa-report.json:/content?@microsoft.graph.conflictBehavior=replace`,
     ]);
     for (const upload of uploads()) {
       expect(upload.headers.authorization).toBe(`Bearer ${GRAPH_TOKEN}`);
@@ -268,7 +268,7 @@ describe("jira-evidence with OneDrive storage", () => {
     const result = await run("run");
     expect(warnings(result.output)).toEqual([]);
     const session = requests.find((request) => request.url.endsWith(":/createUploadSession"));
-    expect(session?.url).toBe(`${RUN_FOLDER}/maestro-android/big.png:/createUploadSession`);
+    expect(session?.url).toBe(`${RUN_FOLDER}/android/big.png:/createUploadSession`);
     const chunks = requests.filter((request) => request.url === SESSION_PATH);
     const chunk = 10 * 320 * 1024;
     expect(chunks.map((request) => request.headers["content-range"])).toEqual([
@@ -279,11 +279,36 @@ describe("jira-evidence with OneDrive storage", () => {
     expect(commentText()).toContain("(3 files)");
   });
 
+  it("names Maestro's files by platform and flow, and stores a summary of the flows", async () => {
+    write(
+      "maestro-android/maestro-report-happy-path.xml",
+      '<testsuites><testsuite tests="1" failures="0"><testcase id="happy-path" name="happy-path"/></testsuite></testsuites>',
+    );
+    write(
+      "maestro-ios/maestro-report-offline.xml",
+      '<testsuites><testsuite tests="1" failures="1"><testcase name="offline"><failure>no</failure></testcase></testsuite></testsuites>',
+    );
+    write("maestro-android/maestro-output/happy-path/screenshots/home.png", "png bytes");
+    write("maestro-ios/.maestro/tests/2026-11-12_113444/old.png", "png bytes");
+    await run("run");
+    const names = uploads().map((request) => request.url.slice(RUN_FOLDER.length + 1).split(":/content")[0]);
+    expect(names.sort()).toEqual([
+      "android/happy-path/screenshots/home.png",
+      "ios/2026-11-12_113444/old.png",
+      "summary.md",
+    ]);
+    const summary = uploads()
+      .find((request) => request.url.includes("/summary.md:"))
+      ?.body.toString();
+    expect(summary).toContain("| android | happy-path | passed |");
+    expect(summary).toContain("| ios | offline | failed |");
+  });
+
   it("replaces the characters SharePoint refuses in a file name", async () => {
     write("maestro-android/home: list?.png", "png bytes");
     await run("run");
     expect(uploads().map((request) => request.url)).toEqual([
-      `${RUN_FOLDER}/maestro-android/home_%20list_.png:/content?@microsoft.graph.conflictBehavior=replace`,
+      `${RUN_FOLDER}/android/home_%20list_.png:/content?@microsoft.graph.conflictBehavior=replace`,
     ]);
   });
 
@@ -293,13 +318,13 @@ describe("jira-evidence with OneDrive storage", () => {
     const result = await run("run");
     expect(result.status).toBe(0);
     expect(warnings(result.output).join("\n")).toContain(
-      "uploading qa-agent/qa-artifacts/01-home.png to OneDrive failed: Microsoft answered 403",
+      "uploading qa-agent/01-home.png to OneDrive failed: Microsoft answered 403",
     );
     const text = commentText();
     expect(text).toContain(LINK_URL);
     expect(text).toContain("(1 files)");
     expect(text).toContain("Files OneDrive did not take");
-    expect(text).toContain("qa-agent/qa-artifacts/01-home.png");
+    expect(text).toContain("qa-agent/01-home.png");
   });
 
   it("tries a busy Graph once more after its Retry-After", async () => {

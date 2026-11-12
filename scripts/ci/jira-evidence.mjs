@@ -20,12 +20,22 @@
 // Graph, on every run, and the comment links the folder with a view-only link for the organization (never anonymous):
 //   <ONEDRIVE_FOLDER>/<story>/<ticket>/PR-<PR_NUMBER>/<RUN_ID>-attempt-<RUN_ATTEMPT>/   the run mode
 //   <ONEDRIVE_FOLDER>/<story>/<ticket>/PR-<PR_NUMBER>/merged/                          the merge mode
+// Inside the folder the files are named for people (ADR 0022 in ICligo): summary.md (each flow's result per platform),
+// qa-report.json, android/<flow>/… and ios/<flow>/… (Maestro's screenshots), qa-agent/… (the QA agent's).
 // It needs MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET (an app registration with Sites.Selected, granted write on
 // the one site) and MS_DRIVE_ID. MS_LOGIN_URL and MS_GRAPH_URL replace Microsoft's hosts in tests only; no workflow
 // sets them.
 // Jira and OneDrive must never change a device-check result: every failure prints a ::warning:: and the script
 // exits 0.
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { parseTicketKey } from "./ticket-key.mjs";
 
@@ -391,11 +401,75 @@ async function folderLink(token, drive, folder) {
   return webUrl ?? null;
 }
 
+const PLATFORM_FOLDERS = { "maestro-android": "android", "maestro-ios": "ios" };
+
+// The name a file gets in the run's folder: the platform and the flow instead of the artifact's and Maestro's
+// folders. `maestro-android/maestro-output/<flow>/<file>` is `android/<flow>/<file>`; Maestro's older timestamped
+// output, `.maestro/tests/<time>/`, keeps only the time.
+function storedName(name) {
+  const [artifact, ...rest] = name.split(sep);
+  if (Object.hasOwn(PLATFORM_FOLDERS, artifact)) {
+    const inner = rest.join(sep).replace(
+      new RegExp(`^(?:maestro-output|\\.maestro\\${sep}tests)\\${sep}`),
+      "",
+    );
+    return join(PLATFORM_FOLDERS[artifact], inner);
+  }
+  if (artifact === "qa-agent" && rest[0] === "qa-artifacts")
+    return join("qa-agent", ...rest.slice(1));
+  if (artifact === "qa-report") return join(...rest);
+  return name;
+}
+
+// Each flow's result per platform, from Maestro's JUnit reports, as summary.md in a temporary folder. None when the
+// run has no report.
+function summaryFile() {
+  const rows = [];
+  for (const [folder, platform] of Object.entries(PLATFORM_FOLDERS)) {
+    const reports = filesIn(folder).filter((file) =>
+      /(^|\/)maestro-report-[^/]*\.xml$/.test(file),
+    );
+    for (const file of reports.sort()) {
+      const xml = readFileSync(join(evidenceDir, folder, file), "utf8");
+      for (const testcase of xml.matchAll(
+        /<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g,
+      )) {
+        const flow =
+          /\bname="([^"]*)"/.exec(testcase[1])?.[1] ??
+          basename(file, ".xml").replace(/^maestro-report-/, "");
+        const failed = /<(?:failure|error)\b/.test(testcase[2] ?? "");
+        rows.push(`| ${platform} | ${flow} | ${failed ? "failed" : "passed"} |`);
+      }
+    }
+  }
+  if (rows.length === 0) return [];
+  const path = join(mkdtempSync(join(tmpdir(), "evidence-")), "summary.md");
+  writeFileSync(
+    path,
+    [
+      "# Device-check run",
+      "",
+      ...(runUrl ? [`Run: ${runUrl}`, ""] : []),
+      "| Platform | Flow | Result |",
+      "|---|---|---|",
+      ...rows,
+      "",
+      "Screenshots: `android/<flow>/` and `ios/<flow>/`; the QA agent's in `qa-agent/`.",
+      "",
+    ].join("\n"),
+  );
+  return [path];
+}
+
 // Uploads the files to the run's folder, each in its own request so one refused file does not drop the others, and
 // stops at the first call Microsoft does not answer. Returns the folder's link (null when nothing was stored) and the
 // names stored and not.
 async function store(files) {
-  const names = files.map((file) => relative(evidenceDir, file));
+  const names = files.map((file) =>
+    file.startsWith(evidenceDir + sep)
+      ? storedName(relative(evidenceDir, file))
+      : basename(file),
+  );
   const none = { url: null, stored: [], failed: names };
   if (files.length === 0) return none;
   for (const name of [
@@ -690,7 +764,13 @@ async function postRun() {
   // On OneDrive every run is stored; Jira attachments only when something failed, to spare the Jira site's storage.
   const evidence =
     storage === "onedrive"
-      ? storedList(await store([...screenshots(qa), ...qaReportFile()]))
+      ? storedList(
+          await store([
+            ...summaryFile(),
+            ...screenshots(qa),
+            ...qaReportFile(),
+          ]),
+        )
       : attachedList(
           flagged
             ? await attach(screenshots(qa))
@@ -717,7 +797,11 @@ async function postMerge() {
     return;
   }
   if (storage === "onedrive") {
-    const stored = await store([...files, ...qaReportFile()]);
+    const stored = await store([
+      ...summaryFile(),
+      ...files,
+      ...qaReportFile(),
+    ]);
     if (!stored.url) return;
     await comment([
       paragraph(

@@ -101,4 +101,57 @@ describe("run-maestro.sh", () => {
     expect(status).toBe(1);
     expect(maestroFlows(calls)).toEqual(["bad", "good"]);
   });
+
+  describe("feature folders, tags and output", () => {
+    // A project that keeps one folder per feature has no .maestro/flows.
+    const featureFlow = (feature: string, name: string, config: string) => {
+      rmSync(join(dir, ".maestro", "flows"), { recursive: true, force: true });
+      mkdirSync(join(dir, ".maestro", feature), { recursive: true });
+      writeFileSync(join(dir, ".maestro", feature, `${name}.yml`), `appId: \${APP_ID}\n${config}---\n- launchApp\n`);
+    };
+    const ranFlows = (calls: string[]) =>
+      calls.filter((c) => c.startsWith("maestro ")).map((c) => /\/([a-z-]+)\.yml/.exec(c)?.[1]);
+
+    it("runs the flows of every feature folder, but not the shared subflows", () => {
+      featureFlow("login", "happy-path", "tags: [smoke, login]\n");
+      featureFlow("settings", "theme", "tags: [settings]\n");
+      featureFlow("_subflows", "open-login", "");
+      const { status, calls } = run();
+      expect(status).toBe(0);
+      expect(ranFlows(calls)).toEqual(["happy-path", "theme"]);
+    });
+
+    it("keeps .maestro/flows when the project has it, and ignores feature folders then", () => {
+      flow("legacy", "");
+      mkdirSync(join(dir, ".maestro", "subflows"));
+      writeFileSync(join(dir, ".maestro", "subflows", "helper.yml"), "appId: x\n---\n- launchApp\n");
+      const { calls } = run();
+      expect(ranFlows(calls)).toEqual(["legacy"]);
+    });
+
+    it("runs only the flows with one of MAESTRO_TAGS", () => {
+      featureFlow("login", "happy-path", "tags: [smoke, login]\n");
+      featureFlow("login", "offline", "tags:\n  - login\n");
+      featureFlow("rankings", "list", "tags: [rankings]\n");
+      featureFlow("settings", "theme", "tags: [settings-x]\n");
+      const { status, stdout, calls } = run({ MAESTRO_TAGS: "smoke,rankings settings" });
+      expect(status).toBe(0);
+      expect(ranFlows(calls)).toEqual(["happy-path", "list"]);
+      expect(stdout).toContain("Not affected by this change, skipped: .maestro/login/offline.yml");
+      expect(stdout).toContain("Not affected by this change, skipped: .maestro/settings/theme.yml");
+    });
+
+    it("drops the flows with one of MAESTRO_EXCLUDE_TAGS", () => {
+      featureFlow("login", "happy-path", "tags: [smoke, login]\n");
+      featureFlow("login", "wrong-password", "tags: [login, nightly]\n");
+      const { calls } = run({ MAESTRO_EXCLUDE_TAGS: "nightly" });
+      expect(ranFlows(calls)).toEqual(["happy-path"]);
+    });
+
+    it("writes each flow's output to a folder named after it", () => {
+      featureFlow("login", "happy-path", "");
+      const { calls } = run();
+      expect(calls.find((c) => c.startsWith("maestro "))).toContain("--test-output-dir maestro-output/happy-path");
+    });
+  });
 });

@@ -107,6 +107,7 @@ describe("the Maestro variables in the shared workflows", () => {
     ["device-checks.yml", "maestro-android"],
     ["device-checks.yml", "maestro-ios"],
     ["ios-regression.yml", "regression"],
+    ["android-regression.yml", "regression"],
   ])("%s %s exports them before the flows and redacts them before the upload", (file, name) => {
     const text = job(workflow(file), name);
     const exported = text.indexOf("maestro-env.sh\" export");
