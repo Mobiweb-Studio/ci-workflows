@@ -106,7 +106,7 @@ jobs:
         if: always()
         env:
           MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
-        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact "$HOME/.maestro/tests" maestro-report-*.xml
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact maestro-output "$HOME/.maestro/tests" maestro-report-*.xml
       - name: Upload the Maestro reports and screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -114,7 +114,7 @@ jobs:
           name: ios-regression-${{ matrix.runtime }}
           path: |
             maestro-report-*.xml
-            ~/.maestro/tests
+            maestro-output
           if-no-files-found: warn
           retention-days: 15
           overwrite: true

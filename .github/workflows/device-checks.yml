@@ -65,7 +65,9 @@ name: device-checks
 # which gate them (reviewers, branch rules), but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json
-# and qa-notes.md, .maestro/flows, vendors/<vendor>/maestro, scripts/agent-qa/instructions.md.
+# and qa-notes.md, the flows (.maestro/flows, or the feature folders .maestro/<feature>), the optional .maestro/IMPACT
+# (which flows a change affects, read by device-check-mode.mjs), vendors/<vendor>/maestro,
+# scripts/agent-qa/instructions.md.
 # Runs on the `pull_request` event only, never `pull_request_target` or `workflow_run`: it holds the Claude token,
 # and fork code must never reach it. Any other event fails the first job.
 # The caller owns the trigger (pull_request: opened, synchronize, reopened, ready_for_review, converted_to_draft,
@@ -159,6 +161,8 @@ jobs:
       pull-requests: read
     outputs:
       run_maestro: ${{ steps.maestro.outputs.run == 'true' && inputs.maestro }}
+      # The flow tags the change affects, from the project's optional .maestro/IMPACT; empty runs every flow.
+      maestro_tags: ${{ steps.maestro.outputs.tags }}
       run_qa: ${{ steps.qa.outputs.run == 'true' && inputs.qa-agent }}
     steps:
       - name: Require a pull_request event
@@ -236,6 +240,9 @@ jobs:
     timeout-minutes: 45
     env:
       MAESTRO_VERSION: 2.10.0
+      # Only the flows the change affects (ADR 0022 in ICligo); flows tagged `nightly` run only in the regression.
+      MAESTRO_TAGS: ${{ needs.changes.outputs.maestro_tags }}
+      MAESTRO_EXCLUDE_TAGS: nightly
     steps:
       - uses: actions/checkout@v7
       - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
@@ -282,7 +289,7 @@ jobs:
         if: always()
         env:
           MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
-        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact "$HOME/.maestro/tests" maestro-report-*.xml
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact maestro-output "$HOME/.maestro/tests" maestro-report-*.xml
       - name: Upload the Maestro report and screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -290,7 +297,7 @@ jobs:
           name: maestro-android
           path: |
             maestro-report-*.xml
-            ~/.maestro/tests
+            maestro-output
           if-no-files-found: warn
           retention-days: 15
           # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
@@ -311,6 +318,8 @@ jobs:
     env:
       MAESTRO_VERSION: 2.10.0
       MAESTRO_PLATFORM: ios
+      MAESTRO_TAGS: ${{ needs.changes.outputs.maestro_tags }}
+      MAESTRO_EXCLUDE_TAGS: nightly
       NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
@@ -348,7 +357,7 @@ jobs:
         if: always()
         env:
           MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
-        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact "$HOME/.maestro/tests" maestro-report-*.xml
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact maestro-output "$HOME/.maestro/tests" maestro-report-*.xml
       - name: Upload the Maestro report and screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -356,7 +365,7 @@ jobs:
           name: maestro-ios
           path: |
             maestro-report-*.xml
-            ~/.maestro/tests
+            maestro-output
           if-no-files-found: warn
           retention-days: 15
           # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.

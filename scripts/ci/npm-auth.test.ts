@@ -41,7 +41,7 @@ describe("the npm token for private packages", () => {
     );
   });
 
-  it.each(["device-checks.yml", "native-cache.yml"])("%s gives the token to the job that runs device-apk", (name) => {
+  it.each(["device-checks.yml", "native-cache.yml", "android-regression.yml"])("%s gives the token to the job that runs device-apk", (name) => {
     const text = read(".github", "workflows", name);
     const job = Object.values(jobs(text)).find((block) => block.includes("actions/device-apk@"));
     expect(job).toContain("NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}");

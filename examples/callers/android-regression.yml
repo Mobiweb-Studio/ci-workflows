@@ -1,0 +1,28 @@
+name: android-regression
+
+# Every Maestro flow on an Android emulator, every night on main, so a regression a narrowed PR run missed shows up
+# the next morning. The shared workflow refuses any event but schedule and workflow_dispatch: never trigger it from a
+# pull request.
+on:
+  schedule:
+    # Every night at 02:00 UTC, when nobody waits on the runners.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-regression
+  cancel-in-progress: false
+
+jobs:
+  android-regression:
+    uses: Mobiweb-Studio/ci-workflows/.github/workflows/android-regression.yml@v1
+    with:
+      reference-vendor: ${{ vars.REFERENCE_VENDOR }}
+    # A repository secret, passed by name. Only a project whose .npmrc reads private packages needs it.
+    secrets:
+      NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      # Optional: the flows' variables, one MAESTRO_<NAME>=<value> per line (test accounts), for the Maestro jobs only.
+      MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}

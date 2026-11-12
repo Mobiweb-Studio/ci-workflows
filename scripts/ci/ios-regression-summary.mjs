@@ -2,7 +2,8 @@
 //
 //   node scripts/ci/ios-regression-summary.mjs     in the project's checkout, after the flows ran
 //
-// Reads the flows run-maestro.sh runs (.maestro/flows and vendors/$APP_VARIANT/maestro), their `ios` tag, and the
+// Reads the flows run-maestro.sh runs (.maestro/flows, or the feature folders .maestro/<feature> when it is absent,
+// and vendors/$APP_VARIANT/maestro), their `ios` tag, and the
 // JUnit report each one left (maestro-report-<name>.xml). Writes a table to GITHUB_STEP_SUMMARY (stdout without it),
 // with the regressions (flows tagged `ios` that failed or left no report) and the candidates (untagged flows that
 // passed, which can now be tagged). Exits 1 when there is a regression, so the run fails only for those; an untagged
@@ -39,7 +40,19 @@ function result(name) {
   return failures > 0 ? "failed" : "passed";
 }
 
-const rows = [...flowsIn(".maestro/flows"), ...flowsIn(join("vendors", vendor, "maestro"))].map((path) => {
+// The same folders as run-maestro.sh: .maestro/flows when it exists, otherwise every folder of .maestro whose name
+// does not start with `_`.
+function projectFlows() {
+  if (existsSync(".maestro/flows")) return flowsIn(".maestro/flows");
+  if (!existsSync(".maestro")) return [];
+  return readdirSync(".maestro", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
+    .map((entry) => entry.name)
+    .sort()
+    .flatMap((name) => flowsIn(join(".maestro", name)));
+}
+
+const rows = [...projectFlows(), ...flowsIn(join("vendors", vendor, "maestro"))].map((path) => {
   const name = basename(path, ".yml");
   return { path, tagged: taggedIos(readFileSync(path, "utf8")), result: result(name) };
 });

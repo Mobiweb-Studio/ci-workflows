@@ -15,6 +15,7 @@ type Input = {
   label?: string;
   baseChanged?: boolean;
   files?: string[];
+  impact?: string;
 };
 
 describe("device-check-mode", () => {
@@ -45,7 +46,7 @@ describe("device-check-mode", () => {
   };
 
   // Runs the script as the workflows do: inputs in the environment, a file that lists the changed files.
-  const run = (command: "decide" | "comment", input: Input = {}) => {
+  const run = (command: "decide" | "comment" | "tags", input: Input = {}) => {
     const listPath = join(dir, `files-${counter++}.txt`);
     writeFileSync(listPath, (input.files ?? ["src/App.tsx"]).join("\n"));
     const env: Record<string, string> = {
@@ -60,6 +61,10 @@ describe("device-check-mode", () => {
       CHANGED_FILES: listPath,
     };
     if (input.check !== undefined) env.CHECK = input.check;
+    if (input.impact !== undefined) {
+      env.IMPACT_FILE = join(dir, `impact-${counter++}`);
+      writeFileSync(env.IMPACT_FILE, input.impact);
+    }
     return spawnScript(env, command);
   };
 
@@ -498,6 +503,100 @@ describe("device-check-mode", () => {
       expect(
         comment({ action: "edited", baseChanged: true, base: "us/story" }),
       ).not.toContain("retarget");
+    });
+  });
+
+  describe("tags", () => {
+    const impact = [
+      "# Flows a change affects (ADR 0022)",
+      "src/pages/login/**  login",
+      "src/pages/rankings/ rankings",
+      "src/shared/**       *",
+      ".maestro/login/*.yml login",
+      "src/pages/*/model/*.ts models # every page's model",
+    ].join("\n");
+
+    const tags = (input: Input) => {
+      const result = run("tags", input);
+      expect(result.status).toBe(0);
+      return result.stdout.trim().split("\n");
+    };
+
+    it("runs every flow when the project has no impact map", () => {
+      expect(tags({ files: ["src/pages/login/ui/LoginPage.tsx"] })).toEqual([
+        "tags=",
+        "tags-reason=no-impact-map",
+      ]);
+    });
+
+    it("runs smoke plus the tags of the matching lines", () => {
+      expect(
+        tags({
+          impact,
+          files: [
+            "src/pages/login/ui/LoginPage.tsx",
+            "src/pages/rankings/ui/deep/List.tsx",
+            "docs/features/login.md",
+          ],
+        }),
+      ).toEqual(["tags=smoke login rankings", "tags-reason=impact"]);
+    });
+
+    it("counts every matching line, and matches one folder with a single star", () => {
+      expect(
+        tags({ impact, files: ["src/pages/login/model/session.ts"] }),
+      ).toEqual(["tags=smoke login models", "tags-reason=impact"]);
+      expect(
+        tags({ impact, files: [".maestro/login/happy-path.yml"] }),
+      ).toEqual(["tags=smoke login", "tags-reason=impact"]);
+    });
+
+    it("runs every flow when an app file is not in the map", () => {
+      expect(
+        tags({
+          impact,
+          files: ["src/pages/login/ui/LoginPage.tsx", "src/app/navigation/RootLayout.tsx"],
+        }),
+      ).toEqual(["tags=", "tags-reason=unmapped"]);
+    });
+
+    it("runs every flow when a line maps the file to all of them", () => {
+      expect(tags({ impact, files: ["src/shared/ui/Button.tsx"] })).toEqual([
+        "tags=",
+        "tags-reason=maps-to-all",
+      ]);
+    });
+
+    it("runs every flow on a story PR", () => {
+      expect(
+        tags({ impact, labels: ["us"], files: ["src/pages/login/ui/LoginPage.tsx"] }),
+      ).toEqual(["tags=", "tags-reason=story-pr"]);
+    });
+
+    it("runs only smoke when no app file changed", () => {
+      expect(tags({ impact, files: ["README.md"] })).toEqual([
+        "tags=smoke",
+        "tags-reason=impact",
+      ]);
+    });
+
+    it("fails on a line with no tag", () => {
+      const result = run("tags", { impact: "src/pages/login/**\n" });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("names no flow tag");
+    });
+
+    it("names the tags in the mode comment", () => {
+      const result = run("comment", { impact, files: ["src/pages/rankings/ui/List.tsx"] });
+      const maestroLine = result.stdout.split("\n").find((line) => line.includes("maestro-android"));
+      expect(maestroLine).toContain("runs the flows tagged `smoke`, `rankings`");
+      const qaLine = result.stdout.split("\n").find((line) => line.includes("qa-agent"));
+      expect(qaLine).toContain("full run");
+    });
+
+    it("names the unmapped file in the mode comment", () => {
+      const result = run("comment", { impact, files: ["app.config.ts"] });
+      expect(result.stdout).toContain("every flow: `app.config.ts` is not in");
     });
   });
 });
