@@ -148,6 +148,20 @@ describe("run-maestro.sh", () => {
       expect(ranFlows(calls)).toEqual(["happy-path"]);
     });
 
+    it("lists each flow that ran in maestro-output/flows.tsv, with its name and tags", () => {
+      featureFlow("login", "happy-path", "name: Login happy path\ntags: [smoke, login, ICLIGO-19-AC9]\n");
+      featureFlow("login", "listed", "tags:\n  - login\n  - ICLIGO-19-AC11\n");
+      featureFlow("login", "plain", "");
+      featureFlow("login", "skipped", "tags: [nightly]\n");
+      run({ MAESTRO_EXCLUDE_TAGS: "nightly" });
+      expect(readFileSync(join(dir, "maestro-output", "flows.tsv"), "utf8").split("\n")).toEqual([
+        "happy-path\t.maestro/login/happy-path.yml\tLogin happy path\tsmoke,login,ICLIGO-19-AC9",
+        "listed\t.maestro/login/listed.yml\tlisted\tlogin,ICLIGO-19-AC11",
+        "plain\t.maestro/login/plain.yml\tplain\t",
+        "",
+      ]);
+    });
+
     it("writes each flow's output to a folder named after it", () => {
       featureFlow("login", "happy-path", "");
       const { calls } = run();

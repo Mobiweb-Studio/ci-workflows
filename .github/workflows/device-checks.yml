@@ -609,6 +609,8 @@ jobs:
           BRANCH: ${{ github.head_ref }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # The flows' table links each flow to its file at the commit the checks ran on.
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha }}
           EVIDENCE_DIR: evidence
           MAESTRO_RESULT: ${{ needs.maestro-android.result }}
           MAESTRO_IOS_RESULT: ${{ needs.maestro-ios.result }}
