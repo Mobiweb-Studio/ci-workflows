@@ -20,6 +20,8 @@ name: ios-regression
 #                     writes `//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}` to a user-level .npmrc under
 #                     RUNNER_TEMP, never to the Mac's own ~/.npmrc, before `pnpm install`. Without it the variable is
 #                     empty and nothing changes.
+#   MAESTRO_ENV       Optional, by name from the caller's repository secrets: the flows' variables, one
+#                     MAESTRO_<NAME>=<value> per line, as in device-checks (scripts/ci/maestro-env.sh).
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json,
 # .maestro/flows and vendors/<vendor>/maestro.
@@ -40,6 +42,8 @@ on:
         default: '["newest"]'
     secrets:
       NPM_AUTH_TOKEN:
+        required: false
+      MAESTRO_ENV:
         required: false
 
 jobs:
@@ -72,6 +76,11 @@ jobs:
           fi
       - uses: actions/checkout@v7
       - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Put the project's Maestro variables in the environment
+        # MAESTRO_ENV holds test accounts and the like (scripts/ci/maestro-env.sh): each value is masked first.
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" export
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
@@ -92,6 +101,12 @@ jobs:
         run: bash "$CI_WORKFLOWS_DIR/scripts/ci/run-maestro.sh"
       - name: Sum up the regressions and the flows that can be tagged
         run: node "$CI_WORKFLOWS_DIR/scripts/ci/ios-regression-summary.mjs"
+      - name: Take the Maestro variables out of Maestro's output
+        # Its debug output and reports hold the typed text, so the values are replaced before the upload.
+        if: always()
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact "$HOME/.maestro/tests" maestro-report-*.xml
       - name: Upload the Maestro reports and screenshots
         if: always()
         uses: actions/upload-artifact@v7

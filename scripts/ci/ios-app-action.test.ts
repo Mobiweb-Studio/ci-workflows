@@ -90,7 +90,7 @@ describe("ios-regression.yml", () => {
     expect(workflow).not.toMatch(/^ *pull_request(_target)?:/m);
   });
 
-  it("runs on the iOS runner only when one is named, one runtime at a time, with no secret but the npm token", () => {
+  it("runs on the iOS runner only when one is named, one runtime at a time, with no secret but the npm token and the flows' variables", () => {
     expect(regression).toContain("if: ${{ inputs.ios-runner != '' }}");
     expect(regression).toContain(
       "runs-on: ${{ startsWith(inputs.ios-runner, '[') && fromJSON(inputs.ios-runner) || inputs.ios-runner }}",
@@ -99,8 +99,10 @@ describe("ios-regression.yml", () => {
     expect(regression).toMatch(/fail-fast: false\n/);
     expect(regression).toContain("runtime: ${{ fromJSON(inputs.runtimes) }}");
     expect(regression).toContain("IOS_RUNTIME: ${{ matrix.runtime }}");
-    expect(workflow.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
-    expect(workflow).toMatch(/^ {4}secrets:\n {6}NPM_AUTH_TOKEN:\n {8}required: false\n(?! {6}\S)/m);
+    expect([...new Set(workflow.match(/secrets\.[A-Z_]+/g))]).toEqual(["secrets.NPM_AUTH_TOKEN", "secrets.MAESTRO_ENV"]);
+    expect(workflow).toMatch(
+      /^ {4}secrets:\n {6}NPM_AUTH_TOKEN:\n {8}required: false\n {6}MAESTRO_ENV:\n {8}required: false\n(?! {6}\S)/m,
+    );
   });
 
   it("runs every flow and lets only the summary fail the job", () => {
