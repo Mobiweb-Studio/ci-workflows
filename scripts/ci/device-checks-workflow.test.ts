@@ -244,11 +244,13 @@ describe("device-checks.yml", () => {
       expect(guard).toBeLessThan(text.indexOf("device-ios-app@"));
     });
 
-    it("keeps fork code and every secret but the optional npm token off the runner, which can be a shared Mac", () => {
+    // MAESTRO_ENV holds only the flows' test values (test accounts on a dev backend), and maestro-env.sh redacts them
+    // from Maestro's output, so none stays on the shared Mac's disk.
+    it("keeps fork code and every secret but the optional npm token and the flows' variables off the runner, which can be a shared Mac", () => {
       expect(text).toContain(
         "github.event.pull_request.head.repo.full_name == github.repository",
       );
-      expect(text.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
+      expect([...new Set(text.match(/secrets\.[A-Z_]+/g))]).toEqual(["secrets.NPM_AUTH_TOKEN", "secrets.MAESTRO_ENV"]);
       expect(text).not.toMatch(/^ {4}environment:/m);
     });
 

@@ -57,7 +57,10 @@ name: device-checks
 # jira-evidence-storage is onedrive) and optionally NPM_AUTH_TOKEN (the `pnpm install` of the `apk` and
 # `maestro-ios` jobs, for a project with private packages on GitHub Packages: the device-apk action writes its reference
 # to ~/.npmrc, and device-ios-app to a user-level .npmrc under RUNNER_TEMP; without it the variable is empty and
-# nothing changes). The jobs also declare the environments `qa-agent` and `jira-evidence`,
+# nothing changes), and optionally MAESTRO_ENV (the `maestro-android` and `maestro-ios` jobs only, never `qa-agent`:
+# one MAESTRO_<NAME>=<value> per line, such as a test account for flows that sign in for real; scripts/ci/maestro-env.sh
+# masks each value, exports them for Maestro, and replaces them with *** in Maestro's output before it is uploaded).
+# The jobs also declare the environments `qa-agent` and `jira-evidence`,
 # which gate them (reviewers, branch rules), but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts, vendors/<vendor>/vendor.json
@@ -141,6 +144,8 @@ on:
       MS_CLIENT_SECRET:
         required: false
       NPM_AUTH_TOKEN:
+        required: false
+      MAESTRO_ENV:
         required: false
 
 jobs:
@@ -233,6 +238,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Put the project's Maestro variables in the environment
+        # MAESTRO_ENV holds test accounts and the like (scripts/ci/maestro-env.sh): each value is masked first.
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" export
       - name: Stop when an earlier stage did not pass
         if: ${{ needs.gate.result != 'success' || needs.apk.result != 'success' }}
         env:
@@ -266,6 +276,12 @@ jobs:
           script: |
             adb install android/app/build/outputs/apk/release/app-release.apk
             bash "$CI_WORKFLOWS_DIR/scripts/ci/run-maestro.sh"
+      - name: Take the Maestro variables out of Maestro's output
+        # Its debug output and reports hold the typed text, so the values are replaced before the upload.
+        if: always()
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact "$HOME/.maestro/tests" maestro-report-*.xml
       - name: Upload the Maestro report and screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -298,6 +314,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Put the project's Maestro variables in the environment
+        # MAESTRO_ENV holds test accounts and the like (scripts/ci/maestro-env.sh): each value is masked first.
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" export
       - name: Stop when an earlier stage did not pass
         if: ${{ needs.gate.result != 'success' }}
         env:
@@ -321,6 +342,12 @@ jobs:
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Run the Maestro flows tagged ios on the simulator
         run: bash "$CI_WORKFLOWS_DIR/scripts/ci/run-maestro.sh"
+      - name: Take the Maestro variables out of Maestro's output
+        # Its debug output and reports hold the typed text, so the values are replaced before the upload.
+        if: always()
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact "$HOME/.maestro/tests" maestro-report-*.xml
       - name: Upload the Maestro report and screenshots
         if: always()
         uses: actions/upload-artifact@v7

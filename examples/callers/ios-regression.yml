@@ -26,3 +26,5 @@ jobs:
     # A repository secret, passed by name. Only a project whose .npmrc reads private packages needs it.
     secrets:
       NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+      # Optional: the flows' variables, one MAESTRO_<NAME>=<value> per line (test accounts), for the Maestro jobs only.
+      MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
