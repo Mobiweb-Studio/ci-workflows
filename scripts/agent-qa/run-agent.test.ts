@@ -20,9 +20,11 @@ describe("run-agent.sh", () => {
     expect(command).toContain("--strict-mcp-config");
   });
 
-  it("allows only agent-device commands from the one tool it has", () => {
+  it("allows only agent-device and qa-fill-secret commands from the one tool it has", () => {
     expect(command).toContain("--tools Bash");
-    expect(command).toContain("--allowedTools 'Bash(agent-device:*)'");
+    expect(command).toContain(
+      "--allowedTools 'Bash(agent-device:*)' 'Bash(qa-fill-secret:*)' \\\n",
+    );
   });
 
   it("does not load a plugin or widen the settings sources", () => {
