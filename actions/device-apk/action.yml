@@ -11,6 +11,13 @@ inputs:
     description: The vendor folder to build; empty means "default".
     required: false
     default: ""
+  mock-sign-in:
+    description: >
+      "true" (the default) sets AUTH_SOURCE=mock, so a project whose vendor signs in for real keeps its mock sign-in,
+      as the PR device checks need. "false" leaves AUTH_SOURCE unset, for a job that runs flows against the real
+      sign-in.
+    required: false
+    default: "true"
 outputs:
   apk-path:
     description: Where the APK is.
@@ -40,14 +47,18 @@ runs:
         echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
     - run: pnpm install --frozen-lockfile
       shell: bash
-    - name: Switch crash reporting, the source map upload and the real sign-in off
+    - name: Switch crash reporting and the source map upload off, and the real sign-in unless asked for
       # Set before the repack, which regenerates the app config from this job's environment: set only in
       # build-android-apk, they reached a built APK but not a repacked one. See build-android-apk for why.
       shell: bash
+      env:
+        MOCK_SIGN_IN: ${{ inputs.mock-sign-in }}
       run: |
         echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
         echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
-        echo "AUTH_SOURCE=mock" >> "$GITHUB_ENV"
+        if [ "$MOCK_SIGN_IN" != false ]; then
+          echo "AUTH_SOURCE=mock" >> "$GITHUB_ENV"
+        fi
     - name: Choose the reference vendor
       shell: bash
       env:
@@ -89,6 +100,7 @@ runs:
       uses: Mobiweb-Studio/ci-workflows/actions/build-android-apk@main
       with:
         reference-vendor: ${{ inputs.reference-vendor }}
+        mock-sign-in: ${{ inputs.mock-sign-in }}
     - name: Keep the new APK for the next runs with this fingerprint
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       shell: bash

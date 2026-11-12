@@ -60,3 +60,20 @@ describe("the device-check APK action", () => {
     expect(at).toBeLessThan(deviceApk.indexOf("repack-app@"));
   });
 });
+
+// A job that runs flows against the real sign-in passes mock-sign-in "false"; the PR device checks keep the default.
+describe("the mock-sign-in input", () => {
+  it.each([
+    ["build-android-apk", action],
+    ["device-apk", deviceApk],
+  ])("defaults to true in %s and guards AUTH_SOURCE=mock", (_name, text) => {
+    expect(text).toMatch(/mock-sign-in:\n(?:\s+.*\n)*?\s+default: "true"/);
+    expect(text).toContain("MOCK_SIGN_IN: ${{ inputs.mock-sign-in }}");
+    expect(text).toMatch(/if \[ "\$MOCK_SIGN_IN" != false \]; then\n\s+echo "AUTH_SOURCE=mock"/);
+  });
+
+  it("is passed from device-apk to build-android-apk", () => {
+    const build = deviceApk.slice(deviceApk.indexOf("actions/build-android-apk@"));
+    expect(build.slice(0, build.indexOf("- name:"))).toContain("mock-sign-in: ${{ inputs.mock-sign-in }}");
+  });
+});

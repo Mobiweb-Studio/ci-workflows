@@ -9,6 +9,10 @@ inputs:
     description: The vendor folder to build; empty means "default".
     required: false
     default: ""
+  mock-sign-in:
+    description: '"true" (the default) sets AUTH_SOURCE=mock; "false" leaves it unset. See device-apk.'
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -38,12 +42,17 @@ runs:
       # The APK is built with no APP_ENV, so a reference vendor with a Sentry DSN would report its test
       # runs as production. It also has no upload token to give the Sentry plugin (ADR 0021).
       # AUTH_SOURCE=mock keeps a project's mock sign-in, whose fixed answers the Maestro flows rely on,
-      # when its vendor signs in for real; a project that does not read it is unaffected.
+      # when its vendor signs in for real; a project that does not read it is unaffected. A job that runs flows
+      # against the real sign-in passes mock-sign-in "false".
       shell: bash
+      env:
+        MOCK_SIGN_IN: ${{ inputs.mock-sign-in }}
       run: |
         echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
         echo "SENTRY_DISABLE_AUTO_UPLOAD=true" >> "$GITHUB_ENV"
-        echo "AUTH_SOURCE=mock" >> "$GITHUB_ENV"
+        if [ "$MOCK_SIGN_IN" != false ]; then
+          echo "AUTH_SOURCE=mock" >> "$GITHUB_ENV"
+        fi
     - name: Set up ccache for the C++ build
       # Gradle cannot cache React Native's C++ compilation, so ccache wraps the compiler through CMake.
       # compiler_check=content is needed on CI, where file timestamps change on every checkout.
