@@ -57,9 +57,10 @@ name: device-checks
 # jira-evidence-storage is onedrive) and optionally NPM_AUTH_TOKEN (the `pnpm install` of the `apk` and
 # `maestro-ios` jobs, for a project with private packages on GitHub Packages: the device-apk action writes its reference
 # to ~/.npmrc, and device-ios-app to a user-level .npmrc under RUNNER_TEMP; without it the variable is empty and
-# nothing changes), and optionally MAESTRO_ENV (the `maestro-android` and `maestro-ios` jobs only, never `qa-agent`:
-# one MAESTRO_<NAME>=<value> per line, such as a test account for flows that sign in for real; scripts/ci/maestro-env.sh
-# masks each value, exports them for Maestro, and replaces them with *** in Maestro's output before it is uploaded).
+# nothing changes), and optionally MAESTRO_ENV (the `maestro-android`, `maestro-ios` and `qa-agent` jobs: one
+# MAESTRO_<NAME>=<value> per line, such as a test account for flows that sign in for real; scripts/ci/maestro-env.sh
+# masks each value, exports them, and replaces them with *** in Maestro's and the agent's output before the upload;
+# the agent types them with scripts/agent-qa/bin/qa-fill-secret, so it never sees them).
 # The jobs also declare the environments `qa-agent` and `jira-evidence`,
 # which gate them (reviewers, branch rules), but an environment's own secrets do not reach a called workflow.
 # Token permissions the caller job must grant: contents: read, pull-requests: write, checks: read.
@@ -427,6 +428,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: Mobiweb-Studio/ci-workflows/actions/ci-scripts@main
+      - name: Put the project's Maestro variables in the environment
+        # The agent signs in with them through qa-fill-secret, which types a value without showing it to the agent.
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" export
       - name: Stop when an earlier stage did not pass
         if: ${{ needs.gate.result != 'success' || needs.apk.result != 'success' }}
         env:
@@ -483,6 +489,12 @@ jobs:
             adb install android/app/build/outputs/apk/release/app-release.apk
             mkdir -p qa-artifacts
             bash "$CI_WORKFLOWS_DIR/scripts/agent-qa/run-agent.sh"
+      - name: Take the Maestro variables out of the agent's output
+        # What agent-device printed (a typed identifier, say) reaches the agent's output, the artifact and the report.
+        if: ${{ !cancelled() }}
+        env:
+          MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact qa-artifacts qa-claude-output.json qa-claude-error.log
       - name: Upload screenshots and agent output
         id: upload
         if: ${{ !cancelled() }}
