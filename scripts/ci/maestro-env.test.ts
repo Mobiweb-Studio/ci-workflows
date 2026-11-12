@@ -101,7 +101,7 @@ const job = (text: string, name: string) => {
   return next === -1 ? text.slice(start) : text.slice(start, start + 1 + next);
 };
 
-// The values reach only the jobs that run Maestro, before the flows, and leave Maestro's output before its upload.
+// The values reach the jobs that run Maestro or the QA agent, before they run, and leave their output before the upload.
 describe("the Maestro variables in the shared workflows", () => {
   it.each([
     ["device-checks.yml", "maestro-android"],
@@ -120,7 +120,17 @@ describe("the Maestro variables in the shared workflows", () => {
     expect(text.slice(text.lastIndexOf("- name:", redacted), redacted)).toContain("if: always()");
   });
 
-  it("never reach the QA agent", () => {
-    expect(job(workflow("device-checks.yml"), "qa-agent")).not.toContain("MAESTRO_ENV");
+  it("reach the QA agent before it runs and leave its output before the upload and the report", () => {
+    const text = job(workflow("device-checks.yml"), "qa-agent");
+    const exported = text.indexOf("maestro-env.sh\" export");
+    const agent = text.indexOf("run-agent.sh");
+    const redacted = text.indexOf(
+      "maestro-env.sh\" redact qa-artifacts qa-claude-output.json qa-claude-error.log",
+    );
+    expect(exported).toBeGreaterThan(-1);
+    expect(exported).toBeLessThan(agent);
+    expect(redacted).toBeGreaterThan(agent);
+    expect(redacted).toBeLessThan(text.indexOf("actions/upload-artifact@"));
+    expect(redacted).toBeLessThan(text.indexOf("agent-qa/report.mjs"));
   });
 });
