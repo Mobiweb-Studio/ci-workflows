@@ -786,8 +786,10 @@ function qaVerdict(qa) {
       ),
     ];
   const verdict = qa.tooling_failure
-    ? `inconclusive (tooling failure: ${qa.tooling_failure})`
-    : qa.status.replace("_", " ");
+    ? `fail (tooling: ${qa.tooling_failure})`
+    : qa.status === "inconclusive"
+      ? "fail (tooling)"
+      : qa.status.replace("_", " ");
   const content = [
     paragraph(
       strong(`QA agent: ${verdict}`),

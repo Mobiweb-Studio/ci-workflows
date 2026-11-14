@@ -28,6 +28,7 @@ name: device-checks
 #                     only for the other one.
 #   qa-agent-max-turns, qa-agent-max-budget-usd
 #                     The QA agent's turn limit and model cost ceiling in US dollars. Default: 40 turns and $0.50.
+#   qa-agent-model    The QA agent's model, a Claude Code alias or model id, such as claude-sonnet-5-5. Default: haiku.
 #   earlier-checks    The checks of the earlier stages the gate waits for, one per line. Default: the names the
 #                     shared `ci` and `docs-check` workflows report when their caller jobs are `ci` and
 #                     `docs-check`.
@@ -101,6 +102,9 @@ on:
       qa-agent-max-budget-usd:
         type: number
         default: 0.5
+      qa-agent-model:
+        type: string
+        default: haiku
       earlier-checks:
         type: string
         default: |
@@ -432,6 +436,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       QA_MAX_TURNS: ${{ inputs.qa-agent-max-turns }}
       QA_MAX_BUDGET_USD: ${{ inputs.qa-agent-max-budget-usd }}
+      QA_MODEL: ${{ inputs.qa-agent-model }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -499,12 +504,12 @@ jobs:
             mkdir -p qa-artifacts
             bash "$CI_WORKFLOWS_DIR/scripts/agent-qa/run-agent.sh"
       - name: Take the Maestro variables out of the agent's output
-        # What agent-device printed (a typed identifier, say) reaches the agent's output, the artifact and the report.
+        # What agent-device printed (a typed identifier, say) reaches the transcript, the artifact and the report.
         if: ${{ !cancelled() }}
         env:
           MAESTRO_ENV: ${{ secrets.MAESTRO_ENV }}
-        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact qa-artifacts qa-claude-output.json qa-claude-error.log
-      - name: Upload screenshots and agent output
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/maestro-env.sh" redact qa-artifacts qa-claude-transcript.jsonl qa-claude-error.log
+      - name: Upload screenshots and the agent's transcript
         id: upload
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
@@ -512,7 +517,7 @@ jobs:
           name: qa-agent
           path: |
             qa-artifacts
-            qa-claude-output.json
+            qa-claude-transcript.jsonl
             qa-claude-error.log
           if-no-files-found: warn
           retention-days: 15

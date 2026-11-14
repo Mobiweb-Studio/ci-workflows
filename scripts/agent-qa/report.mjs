@@ -1,6 +1,6 @@
-// Turns the QA agent's output into a PR comment and a pass/fail decision.
-// Reads qa-claude-output.json and writes qa-comment.md, qa-status.txt and qa-report.json (the same verdict as
-// data, for the Jira evidence job).
+// Turns the QA agent's run into a PR comment and a pass/fail decision.
+// Reads qa-claude-transcript.jsonl (one event per line; the last is the result) and writes qa-comment.md,
+// qa-status.txt and qa-report.json (the same verdict as data, for the Jira evidence job).
 // Env: HAS_ACK ("true" when the PR has the qa-acknowledged label), ARTIFACT_URL, RUN_URL, QA_MAX_BUDGET_USD (the
 // cost ceiling the agent ran with, default 0.50).
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -12,15 +12,26 @@ const acknowledged = process.env.HAS_ACK === "true";
 const artifactUrl = process.env.ARTIFACT_URL ?? "";
 const runUrl = process.env.RUN_URL ?? "";
 
-function readAgentOutput() {
-  if (!existsSync("qa-claude-output.json")) {
-    return { error: "the agent produced no output file" };
+function readEvents() {
+  if (!existsSync("qa-claude-transcript.jsonl")) return null;
+  const events = [];
+  for (const line of readFileSync("qa-claude-transcript.jsonl", "utf8").split("\n")) {
+    try {
+      events.push(JSON.parse(line));
+    } catch {
+      // A blank or cut line says nothing; the result event is checked below.
+    }
   }
-  let outer;
-  try {
-    outer = JSON.parse(readFileSync("qa-claude-output.json", "utf8"));
-  } catch {
-    return { error: "the agent output was not valid JSON" };
+  return events;
+}
+
+function readAgentOutput(events) {
+  if (events === null) {
+    return { error: "the agent produced no transcript" };
+  }
+  const outer = events.findLast((event) => event?.type === "result");
+  if (!outer) {
+    return { error: "the agent run ended without a result" };
   }
   const usage = {
     costUsd: outer.total_cost_usd,
@@ -44,6 +55,36 @@ function readAgentOutput() {
   }
 }
 
+// Sign-ins that cannot have happened, whatever the agent reports: it typed a variable's name instead of its value, or
+// qa-fill-secret failed. On PR #165 the agent typed MAESTRO_REAL_TP_IDENTIFIER into the login and reported a pass.
+function signInMistake(events) {
+  const commands = new Map();
+  for (const event of events ?? []) {
+    const content = event?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block.type === "tool_use" && typeof block.input?.command === "string") {
+        commands.set(block.id, block.input.command.trim());
+        const name = block.input.command.match(/^agent-device\s+(?:fill|type)\b.*\b(MAESTRO_[A-Z0-9_]+)\b/s)?.[1];
+        if (name) {
+          return `it typed the name ${name} with agent-device instead of filling the value with qa-fill-secret, so it never signed in`;
+        }
+      }
+      if (block.type === "tool_result" && block.is_error) {
+        const command = commands.get(block.tool_use_id) ?? "";
+        if (command.startsWith("qa-fill-secret")) {
+          const text = Array.isArray(block.content)
+            ? block.content.map((part) => part.text ?? "").join(" ")
+            : String(block.content ?? "");
+          const reason = text.split("\n").find((line) => line.trim()) ?? "no output";
+          return `\`${command}\` failed (${reason.trim()}), so it never signed in`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function isValid(report) {
   return (
     report &&
@@ -54,14 +95,23 @@ function isValid(report) {
   );
 }
 
-const { report, error: readError, usage = {} } = readAgentOutput();
-const valid = isValid(report);
-const error = readError ?? "the agent report did not match the expected shape";
+const events = readEvents();
+const { report, error: readError, usage = {} } = readAgentOutput(events);
+const mistake = signInMistake(events);
+const valid = isValid(report) && !mistake;
+const error =
+  mistake ?? readError ?? "the agent report did not match the expected shape";
 const status = valid ? report.status : "inconclusive";
 
 const lines = ["<!-- qa-agent -->", "## QA agent report", ""];
 if (valid) {
-  lines.push(`**Result: ${status.replace("_", " ")}**`, "", report.summary, "");
+  const result =
+    status === "inconclusive"
+      ? acknowledged
+        ? "tooling failure (acknowledged)"
+        : "fail (tooling)"
+      : status.replace("_", " ");
+  lines.push(`**Result: ${result}**`, "", report.summary, "");
   if (report.checked.length > 0) {
     lines.push("| Screen | Expectation | Result |", "|---|---|---|");
     for (const item of report.checked) {
@@ -77,9 +127,9 @@ if (valid) {
   }
 } else {
   lines.push(
-    "**Result: inconclusive (tooling failure)**",
+    `**Result: ${acknowledged ? "tooling failure (acknowledged)" : "fail (tooling)"}**`,
     "",
-    `The QA agent did not produce a usable report: ${error}. This says nothing about the change.`,
+    `The QA agent's run cannot be used: ${error}. This says nothing about the change.`,
   );
 }
 lines.push("");
@@ -101,7 +151,7 @@ if (typeof usage.costUsd === "number" && usage.costUsd > COST_CEILING_USD) {
 if (status === "inconclusive" && !acknowledged) {
   lines.push(
     "",
-    "An inconclusive run fails this check until a reviewer adds the `qa-acknowledged` label and re-runs the job.",
+    "A tooling failure fails this check until a reviewer adds the `qa-acknowledged` label and re-runs the job.",
   );
 }
 

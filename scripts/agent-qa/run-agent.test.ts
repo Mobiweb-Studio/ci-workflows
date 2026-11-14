@@ -31,4 +31,13 @@ describe("run-agent.sh", () => {
     expect(command).not.toContain("--plugin-dir");
     expect(command).not.toMatch(/--setting-sources\s+\S*(project|local)/);
   });
+
+  it("keeps the whole run as a transcript, which the report and the artifact use", () => {
+    expect(command).toContain("--output-format stream-json \\\n  --verbose \\\n");
+    expect(command).toContain("> qa-claude-transcript.jsonl 2> qa-claude-error.log");
+  });
+
+  it("takes the model from QA_MODEL, haiku when it is not set", () => {
+    expect(command).toContain('--model "${QA_MODEL:-haiku}" \\\n');
+  });
 });

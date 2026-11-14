@@ -412,7 +412,7 @@ describe("jira-evidence", () => {
     write("qa-agent/qa-artifacts/01-home.png", "png bytes");
     write("qa-agent/qa-artifacts/steps/02-detail.png", "png bytes");
     write("qa-agent/qa-artifacts/notes.txt", "not a screenshot");
-    write("qa-agent/qa-claude-output.json", "{}");
+    write("qa-agent/qa-claude-transcript.jsonl", "{}");
     const result = await run("merge");
     expect(result.status).toBe(0);
     expect(uploaded().sort()).toEqual(["01-home.png", "02-detail.png"]);
@@ -633,7 +633,7 @@ describe("jira-evidence", () => {
     );
     await run("run");
     expect(commentText()).toContain(
-      "QA agent: inconclusive (tooling failure: the agent output was not valid JSON)",
+      "QA agent: fail (tooling: the agent output was not valid JSON)",
     );
   });
 

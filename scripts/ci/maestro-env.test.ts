@@ -126,7 +126,7 @@ describe("the Maestro variables in the shared workflows", () => {
     const exported = text.indexOf("maestro-env.sh\" export");
     const agent = text.indexOf("run-agent.sh");
     const redacted = text.indexOf(
-      "maestro-env.sh\" redact qa-artifacts qa-claude-output.json qa-claude-error.log",
+      "maestro-env.sh\" redact qa-artifacts qa-claude-transcript.jsonl qa-claude-error.log",
     );
     expect(exported).toBeGreaterThan(-1);
     expect(exported).toBeLessThan(agent);
