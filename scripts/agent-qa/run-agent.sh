@@ -2,7 +2,9 @@
 # Runs Claude Code as the QA agent. It may only run `agent-device` commands and `qa-fill-secret` (bin/, which types a
 # test account's value from MAESTRO_ENV without showing it to the agent), ignores the
 # repository's own Claude settings, and stops at QA_MAX_TURNS turns (default 40) or QA_MAX_BUDGET_USD of model
-# cost (default 0.50).
+# cost (default 0.50). QA_MODEL names the model (default haiku).
+# Writes the whole run to qa-claude-transcript.jsonl, one JSON event per line: each tool call and its output, and last
+# the result event (the object `--output-format json` would write), which report.mjs reads.
 # Needs APP_VARIANT (the vendor under test) and APP_ID (its Android package).
 set -uo pipefail
 
@@ -18,17 +20,18 @@ PATH="$(cd "$(dirname "$0")" && pwd)/bin:$PATH"
 export PATH
 
 claude -p \
-  --model haiku \
+  --model "${QA_MODEL:-haiku}" \
   --max-turns "${QA_MAX_TURNS:-40}" \
   --max-budget-usd "${QA_MAX_BUDGET_USD:-0.50}" \
-  --output-format json \
+  --output-format stream-json \
+  --verbose \
   --no-session-persistence \
   --setting-sources user \
   --strict-mcp-config \
   --tools Bash \
   --allowedTools 'Bash(agent-device:*)' 'Bash(qa-fill-secret:*)' \
   --append-system-prompt-file qa-instructions.md \
-  < qa-input.txt > qa-claude-output.json 2> qa-claude-error.log
+  < qa-input.txt > qa-claude-transcript.jsonl 2> qa-claude-error.log
 
 echo "claude exit code: $?" >> qa-claude-error.log
 exit 0
