@@ -21,6 +21,12 @@ name: device-checks
 #                     the native fingerprint matches (the native-cache workflow seeds the cache from main) and
 #                     builds one when it does not. `ios-app-link` then comments the simulator app's link on the PR,
 #                     from the `runner`, so the token that writes comments never reaches the Mac.
+#   ios-retention-days
+#                     How many days GitHub keeps maestro-ios's report and screenshots (the artifact `maestro-ios`, about
+#                     90 MB a run). Default: 3, because the uploads of a few days of PRs fill the organization's artifact
+#                     storage. The evidence that must last goes to Jira or OneDrive (jira-evidence); jira-evidence-merge
+#                     attaches maestro-ios only while it lasts, so a project that keeps its evidence in Jira
+#                     (jira-evidence-storage `jira`) and merges PRs days after their last push can raise it.
 #   reference-vendor  The vendor folder to build and test; empty means "default". Pass
 #                     `${{ vars.REFERENCE_VENDOR }}`.
 #   maestro, qa-agent true by default. A project that declined a device check (docs/modules in the boilerplate)
@@ -87,6 +93,9 @@ on:
       ios-runner:
         type: string
         default: ""
+      ios-retention-days:
+        type: number
+        default: 3
       reference-vendor:
         type: string
         default: ""
@@ -371,7 +380,7 @@ jobs:
             maestro-report-*.xml
             maestro-output
           if-no-files-found: warn
-          retention-days: 15
+          retention-days: ${{ inputs.ios-retention-days }}
           # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
           overwrite: true
       - name: Zip the simulator app

@@ -83,6 +83,11 @@ describe("ios-regression.yml", () => {
   const workflow = read(".github", "workflows", "ios-regression.yml");
   const regression = jobs(workflow).regression ?? "";
 
+  it("keeps each runtime's report for retention-days, 3 by default", () => {
+    expect(workflow).toMatch(/\n      retention-days:\n        type: number\n        default: 3\n/);
+    expect(regression).toMatch(/name: ios-regression-\$\{\{ matrix\.runtime \}\}\n[\s\S]*?retention-days: \$\{\{ inputs\.retention-days \}\}\n/);
+  });
+
   it("refuses every event but schedule and workflow_dispatch before it checks out any code", () => {
     const guard = regression.indexOf('"$EVENT_NAME" != "schedule" ] && [ "$EVENT_NAME" != "workflow_dispatch"');
     expect(guard).toBeGreaterThan(-1);
