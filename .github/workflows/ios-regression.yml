@@ -14,6 +14,9 @@ name: ios-regression
 #   runtimes          A JSON array of iOS versions, such as '["27.1","26.4"]', each installed on the runner;
 #                     "newest" is the newest one installed. Default: '["newest"]'. A version the runner lacks fails
 #                     its job with the list of what is installed.
+#   retention-days    How many days GitHub keeps each runtime's `ios-regression-<runtime>` artifact (about 45 MB). Default:
+#                     3, so the weekly reports do not fill the organization's artifact storage; the run's summary
+#                     stays on the run page. A project that reads the screenshots later can raise it.
 # Secrets
 #   NPM_AUTH_TOKEN    Optional. The caller passes it by name from its repository secrets. For a project with private
 #                     packages on GitHub Packages, the job sets it in its environment and the device-ios-app action
@@ -40,6 +43,9 @@ on:
       runtimes:
         type: string
         default: '["newest"]'
+      retention-days:
+        type: number
+        default: 3
     secrets:
       NPM_AUTH_TOKEN:
         required: false
@@ -116,7 +122,7 @@ jobs:
             maestro-report-*.xml
             maestro-output
           if-no-files-found: warn
-          retention-days: 15
+          retention-days: ${{ inputs.retention-days }}
           overwrite: true
       - name: Delete the simulator
         if: always()

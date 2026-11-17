@@ -855,7 +855,7 @@ function storedList({ url, stored, failed }) {
       ? [
           paragraph(
             text(
-              "The evidence could not be stored on OneDrive (see the run's warnings). The run's artifacts are kept on GitHub for 15 days.",
+              "The evidence could not be stored on OneDrive (see the run's warnings). The run's artifacts are kept on GitHub for 15 days, its iOS report for 3 by default.",
             ),
           ),
         ]

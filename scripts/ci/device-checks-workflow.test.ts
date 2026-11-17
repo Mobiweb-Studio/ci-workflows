@@ -270,8 +270,9 @@ describe("device-checks.yml", () => {
       expect(last).toContain('ios-simulator.sh" delete');
     });
 
-    it("keeps its report for 15 days and the simulator app for 7, also when a flow failed", () => {
-      expect(text).toMatch(/name: maestro-ios\n[\s\S]*?retention-days: 15\n/);
+    it("keeps its report for ios-retention-days (3 by default) and the simulator app for 7, also when a flow failed", () => {
+      expect(workflow).toMatch(/\n      ios-retention-days:\n        type: number\n        default: 3\n/);
+      expect(text).toMatch(/name: maestro-ios\n[\s\S]*?retention-days: \$\{\{ inputs\.ios-retention-days \}\}\n/);
       expect(text).toMatch(/name: ios-simulator-app\n[\s\S]*?retention-days: 7\n/);
       expect(text.match(/if: \$\{\{ !cancelled\(\) && steps\.app\.outputs\.app-path != '' \}\}/g)).toHaveLength(2);
     });

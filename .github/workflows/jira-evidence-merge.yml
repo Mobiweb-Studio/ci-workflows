@@ -2,8 +2,9 @@ name: jira-evidence-merge
 
 # When a PR merges, attaches the screenshots of its last device-check run to the Jira ticket in the branch name
 # (ADR 0019), or to its story's QA sub-task when jira-evidence-target is qa-subtask, so the ticket keeps them after
-# GitHub deletes the artifacts (15 days). Off until the caller passes jira-evidence as true. Missing evidence and
-# every Jira failure are warnings, never a failed job. Called from the project's own `jira-evidence-merge.yml`, whose
+# GitHub deletes the artifacts (15 days; maestro-ios after device-checks' ios-retention-days, 3 by default, so the
+# iOS screenshots of a run older than that are not attached). Off until the caller passes jira-evidence as true.
+# Missing evidence and every Jira failure are warnings, never a failed job. Called from the project's own `jira-evidence-merge.yml`, whose
 # job id is `jira-evidence-merge`.
 #
 # Inputs
