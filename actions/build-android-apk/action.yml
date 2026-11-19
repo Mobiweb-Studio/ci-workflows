@@ -3,7 +3,8 @@ description: >
   Restores the native build caches and builds the release APK of the reference vendor (the repository
   variable REFERENCE_VENDOR, or "default"). Only the device-apk action calls it, on a cache miss, after it
   installed pnpm, Node, Java and the project's dependencies, so this action does not repeat them (ADR 0018).
-  Written for GitHub's runners and now run on Blacksmith's (ADR 0017).
+  Written for Linux runners (GitHub's, Blacksmith's, ADR 0017); on a self-hosted Apple Silicon Mac it builds the
+  arm64-v8a APK its emulator runs and skips the Linux-only disk cleanup.
 inputs:
   reference-vendor:
     description: The vendor folder to build; empty means "default".
@@ -14,6 +15,8 @@ runs:
   using: composite
   steps:
     - name: Free disk space on the runner
+      # Only on the hosted Linux images, which carry these toolchains; a self-hosted Mac keeps its own disk.
+      if: ${{ runner.os == 'Linux' }}
       # The build plus the emulator image do not fit on the runner's disk ("No space left on
       # device" while installing the emulator). Remove preinstalled toolchains these jobs never
       # use; the Android SDK, Java and Node stay.
@@ -76,11 +79,13 @@ runs:
     - name: Build the release APK
       shell: bash
       working-directory: android
-      # The emulator is x86_64, so skip compiling the other CPU architectures.
+      # Only the emulator's CPU architecture is compiled: x86_64 on Linux, arm64-v8a on an Apple Silicon Mac.
       # Expo's gradle.properties allows 2 GiB of heap and 512 MiB of metaspace, which the build
       # outgrew once expo-updates was added: Gradle ran out of metaspace in the lint step and then
       # hung until the job timed out. The runner has 16 GB, so give the Gradle JVM more room.
-      run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64 "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+      env:
+        ABI: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
+      run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures="$ABI" "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
     - name: Show the ccache hit rate
       if: always()
       shell: bash

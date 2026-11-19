@@ -6,7 +6,11 @@ const hashA = "a".repeat(40);
 const hashB = `b${"a".repeat(39)}`;
 
 function key(vendor: string, input: string, ...rest: string[]) {
-  return spawnSync("node", [script, vendor, ...rest], { input, encoding: "utf8" });
+  return spawnSync("node", [script, vendor, ...rest], { input, encoding: "utf8", env: { ...process.env, DEVICE_APK_ABI: "" } });
+}
+
+function keyFor(abi: string, input: string) {
+  return spawnSync("node", [script, "default"], { input, encoding: "utf8", env: { ...process.env, DEVICE_APK_ABI: abi } });
 }
 
 describe("device-apk-key", () => {
@@ -50,6 +54,19 @@ describe("device-apk-key", () => {
     expect(key("default", JSON.stringify({ hash: hashA }), "android").stdout).toBe(
       `device-apk-v1-x86_64-default-${hashA}\n`,
     );
+  });
+
+  it("prints another key for an arm64-v8a APK, so a Mac's emulator never gets an x86_64 one", () => {
+    const arm = keyFor("arm64-v8a", JSON.stringify({ hash: hashA }));
+    expect(arm.status).toBe(0);
+    expect(arm.stdout).toBe(`device-apk-v1-arm64-v8a-default-${hashA}\n`);
+    expect(keyFor("x86_64", JSON.stringify({ hash: hashA })).stdout).toBe(`device-apk-v1-x86_64-default-${hashA}\n`);
+  });
+
+  it("stops with an error on an unknown ABI", () => {
+    const result = keyFor("mips", JSON.stringify({ hash: hashA }));
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
   });
 
   it("prints an iOS simulator key that never matches an Android one", () => {

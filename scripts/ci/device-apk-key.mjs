@@ -6,13 +6,16 @@
 //   node scripts/ci/device-apk-key.mjs <vendor> [android|ios]
 //                                         reads the JSON of `fingerprint:generate` on stdin, prints the key
 //
+// DEVICE_APK_ABI names the Android APK's CPU architecture: x86_64 (the default, Linux runners) or arm64-v8a (an
+// Apple Silicon Mac's emulator). An APK built for one never matches the other's key.
+//
 // A missing or malformed fingerprint stops with an error: the script never prints a key that could match
 // another build.
 import { readFileSync } from "node:fs";
 
 // Bump when the way an app is built changes (the architecture, the build type, the SDK), so old ones are not reused.
 const KEY_VERSION = "v1";
-const ARCH = "x86_64";
+const ARCH = process.env.DEVICE_APK_ABI || "x86_64";
 // v2: the simulator app is ad-hoc signed with its entitlements; a v1 app was unsigned and cannot use the Keychain.
 const IOS_KEY_VERSION = "v2";
 
@@ -24,6 +27,9 @@ function fail(message) {
 const vendor = process.argv[2];
 if (!vendor || !/^[A-Za-z0-9_-]+$/.test(vendor)) {
   fail(`the vendor must be a folder name, got "${vendor ?? ""}"`);
+}
+if (ARCH !== "x86_64" && ARCH !== "arm64-v8a") {
+  fail(`DEVICE_APK_ABI must be x86_64 or arm64-v8a, got "${ARCH}"`);
 }
 const platform = process.argv[3] ?? "android";
 if (platform !== "android" && platform !== "ios") {

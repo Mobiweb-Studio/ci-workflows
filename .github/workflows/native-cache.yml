@@ -15,8 +15,8 @@ name: native-cache
 # Secrets
 #   NPM_AUTH_TOKEN    Optional. The caller passes it by name from its repository secrets. For a project with private
 #                     packages on GitHub Packages, the `seed` and `seed-ios` jobs set it in their environment, and the
-#                     device-apk action writes `//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}` to ~/.npmrc
-#                     (device-ios-app to a user-level .npmrc under RUNNER_TEMP) before `pnpm install`. Without it the
+#                     device-apk action writes `//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}` to a
+#                     user-level .npmrc under RUNNER_TEMP, as device-ios-app does, before `pnpm install`. Without it the
 #                     variable is empty and nothing changes.
 # Token permissions the caller job must grant: contents: read.
 # Files read from the project: .nvmrc, package.json, pnpm-lock.yaml, app.config.ts and vendors/<vendor>/vendor.json.
