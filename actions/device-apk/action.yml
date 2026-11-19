@@ -30,14 +30,17 @@ runs:
       with:
         distribution: temurin
         java-version: 17
-    - name: Put the npm token's reference in the user-level .npmrc
-      # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line
-      # goes in ~/.npmrc, where it does. The single quotes write the reference, never the token.
+    - name: Put the npm token's reference in a user-level .npmrc for this job only
+      # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line goes
+      # in a user-level one. The runner can be a shared self-hosted Mac, so it is a file under RUNNER_TEMP, which the
+      # runner empties after each job, named by NPM_CONFIG_USERCONFIG (pnpm reads it instead of ~/.npmrc), and the
+      # runner's own ~/.npmrc is never touched. The single quotes write the reference, never the token.
       if: ${{ env.NPM_AUTH_TOKEN != '' }}
       shell: bash
       run: |
         # shellcheck disable=SC2016
-        echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
+        echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' > "$RUNNER_TEMP/npmrc"
+        echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
     - run: pnpm install --frozen-lockfile
       shell: bash
     - name: Switch crash reporting, the source map upload and the real sign-in off
@@ -59,6 +62,9 @@ runs:
     - name: Compute the native fingerprint and the cache key
       id: key
       shell: bash
+      env:
+        # The emulator's CPU architecture, which build-android-apk compiles: arm64-v8a on an Apple Silicon Mac.
+        DEVICE_APK_ABI: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
       run: |
         # The version is the one the installed Expo SDK uses.
         npx --yes @expo/fingerprint@0.20.13 fingerprint:generate --platform android > "$RUNNER_TEMP/fingerprint.json"

@@ -9,8 +9,9 @@ name: device-checks
 # `device-checks / ios-app-link`, `device-checks / qa-agent` and `device-checks / jira-evidence`.
 #
 # Inputs
-#   runner            The runner label for `apk`, `maestro-android` and `qa-agent`. The emulator jobs need KVM and a large disk,
-#                     so use a runner that has both. Default: the Blacksmith label the boilerplate uses.
+#   runner            The runner label for `apk`, `maestro-android` and `qa-agent`. The emulator jobs need a Linux runner with
+#                     KVM and a large disk, or a self-hosted Apple Silicon Mac with the Android SDK (README, "A self-hosted
+#                     Mac"). Default: the Blacksmith label the boilerplate uses.
 #   light-runner      The runner for `changes`, `gate`, `ios-app-link` and `jira-evidence`, which only read, wait or comment.
 #                     Default: ubuntu-latest, a GitHub-hosted runner, so they cost no Blacksmith minutes.
 #   ios-runner        The runner for maestro-ios, which builds the app for the iOS simulator and runs the flows
@@ -63,7 +64,7 @@ name: device-checks
 # JIRA_API_TOKEN (the `jira-evidence` job), MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (the same job, when
 # jira-evidence-storage is onedrive) and optionally NPM_AUTH_TOKEN (the `pnpm install` of the `apk` and
 # `maestro-ios` jobs, for a project with private packages on GitHub Packages: the device-apk action writes its reference
-# to ~/.npmrc, and device-ios-app to a user-level .npmrc under RUNNER_TEMP; without it the variable is empty and
+# and device-ios-app's to a user-level .npmrc under RUNNER_TEMP; without it the variable is empty and
 # nothing changes), and optionally MAESTRO_ENV (the `maestro-android`, `maestro-ios` and `qa-agent` jobs: one
 # MAESTRO_<NAME>=<value> per line, such as a test account for flows that sign in for real; scripts/ci/maestro-env.sh
 # masks each value, exports them, and replaces them with *** in Maestro's and the agent's output before the upload;
@@ -280,6 +281,8 @@ jobs:
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
       - name: Enable KVM for the emulator
+        # Linux only: on an Apple Silicon Mac the emulator uses macOS's own hypervisor, with no setup.
+        if: ${{ runner.os == 'Linux' }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -292,7 +295,8 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          arch: x86_64
+          # x86_64 on Linux, arm64-v8a on an Apple Silicon Mac: the apk job built the APK for the same one.
+          arch: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
           disable-animations: true
           script: |
             adb install android/app/build/outputs/apk/release/app-release.apk
@@ -472,6 +476,8 @@ jobs:
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
       - name: Enable KVM for the emulator
+        # Linux only: on an Apple Silicon Mac the emulator uses macOS's own hypervisor, with no setup.
+        if: ${{ runner.os == 'Linux' }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -506,7 +512,8 @@ jobs:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         with:
           api-level: 34
-          arch: x86_64
+          # x86_64 on Linux, arm64-v8a on an Apple Silicon Mac: the apk job built the APK for the same one.
+          arch: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
           disable-animations: true
           script: |
             adb install android/app/build/outputs/apk/release/app-release.apk

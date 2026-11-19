@@ -22,7 +22,7 @@ name: release
 #                         reach a called workflow.
 #   NPM_AUTH_TOKEN        Optional. The caller passes it by name. For a project with private packages on GitHub
 #                         Packages, the `release` job sets it in its environment and writes its reference to
-#                         ~/.npmrc before `pnpm install`. Without it the variable is empty and nothing changes.
+#                         a user-level .npmrc under RUNNER_TEMP before `pnpm install`. Without it the variable is empty and nothing changes.
 #                         `eas build` installs again on EAS, which needs its own NPM_AUTH_TOKEN secret.
 # Token permissions the caller job must grant: contents: write, pull-requests: write.
 # Files read from the project: the release-please configuration and manifest, .nvmrc, package.json,
@@ -105,13 +105,16 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - name: Put the npm token's reference in the user-level .npmrc
-        # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line
-        # goes in ~/.npmrc, where it does. The single quotes write the reference, never the token.
+      - name: Put the npm token's reference in a user-level .npmrc for this job only
+        # pnpm does not expand environment variables in registry credentials from a project .npmrc, so the line goes
+        # in a user-level one. The runner can be a shared self-hosted Mac, so it is a file under RUNNER_TEMP, which the
+        # runner empties after each job, named by NPM_CONFIG_USERCONFIG (pnpm reads it instead of ~/.npmrc), and the
+        # runner's own ~/.npmrc is never touched. The single quotes write the reference, never the token.
         if: ${{ env.NPM_AUTH_TOKEN != '' }}
         run: |
           # shellcheck disable=SC2016
-          echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc
+          echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' > "$RUNNER_TEMP/npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       # The token is only set from here on, so the install above never sees it.
       - uses: expo/expo-github-action@v9

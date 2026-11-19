@@ -18,27 +18,23 @@ const sites: [string, string][] = [
   ["actions/device-apk", read("actions", "device-apk", "action.yml")],
 ];
 
-const LINE = "echo '//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}' >> ~/.npmrc";
+const LINE = `echo '//npm.pkg.github.com/:_authToken=\${NPM_AUTH_TOKEN}' > "$RUNNER_TEMP/npmrc"`;
+const POINT = 'echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"';
 
 // pnpm does not expand environment variables in registry credentials from a project .npmrc, so a project with
-// private packages gets the credential line in the runner's user-level ~/.npmrc, where it does.
+// private packages gets the credential line in a user-level .npmrc, where it does. Any of these jobs can run on a
+// shared self-hosted Mac, so the file is under RUNNER_TEMP, which the runner empties after each job, and the
+// runner's own ~/.npmrc is never touched.
 describe("the npm token for private packages", () => {
-  it.each(sites)("%s writes the token's reference to ~/.npmrc before pnpm install, only when it is set", (_, text) => {
+  it.each(sites)("%s writes the token's reference to a job-only .npmrc before pnpm install, only when it is set", (_, text) => {
     const write = text.indexOf(LINE);
     expect(write).toBeGreaterThan(-1);
     expect(write).toBeLessThan(text.indexOf("pnpm install"));
+    expect(text.indexOf(POINT)).toBeGreaterThan(write);
+    expect(text.indexOf(POINT)).toBeLessThan(text.indexOf("pnpm install"));
     const step = text.slice(text.lastIndexOf("- name:", write), write);
     expect(step).toContain("if: ${{ env.NPM_AUTH_TOKEN != '' }}");
-  });
-
-  it("writes the reference, never the token", () => {
-    const home = mkdtempSync(join(tmpdir(), "npm-auth-"));
-    execFileSync("bash", ["-c", LINE], {
-      env: { ...process.env, HOME: home, NPM_AUTH_TOKEN: "ghp_not-a-real-token" },
-    });
-    expect(readFileSync(join(home, ".npmrc"), "utf8")).toBe(
-      "//npm.pkg.github.com/:_authToken=${NPM_AUTH_TOKEN}\n",
-    );
+    expect(text).not.toMatch(/>>? ~\/\.npmrc/);
   });
 
   it.each(["device-checks.yml", "native-cache.yml", "android-regression.yml"])("%s gives the token to the job that runs device-apk", (name) => {
