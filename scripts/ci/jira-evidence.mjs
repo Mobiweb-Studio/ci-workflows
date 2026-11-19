@@ -3,6 +3,9 @@
 //
 //   node scripts/ci/jira-evidence.mjs run     one comment with both verdicts; screenshots when a check failed or QA found an issue
 //   node scripts/ci/jira-evidence.mjs merge   the screenshots of the PR's last device-check run, and one comment naming them
+//   node scripts/ci/jira-evidence.mjs release one comment headed by a release (RELEASE_VERSION, and RELEASE_TITLE when
+//                                             set) with both verdicts, the flow table and every screenshot of the run,
+//                                             for a client's Jira that gets a project's evidence per release
 //
 // Inputs come from the environment: JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY (optional), BRANCH,
 // PR_URL, RUN_URL, EVIDENCE_DIR (the downloaded artifacts, one folder per artifact: qa-agent, qa-report,
@@ -53,8 +56,8 @@ function stop(message) {
 }
 
 const command = process.argv[2];
-if (command !== "run" && command !== "merge") {
-  warn(`unknown command "${command ?? ""}", use "run" or "merge"`);
+if (!["run", "merge", "release"].includes(command)) {
+  warn(`unknown command "${command ?? ""}", use "run", "merge" or "release"`);
   process.exit(0);
 }
 
@@ -980,10 +983,46 @@ async function postMerge() {
   ]);
 }
 
+// A release's comment: the verdicts and flows of the run, with its screenshots, under the release's name. The
+// Maestro results come from the reports themselves, since the jobs' results belong to another workflow's run.
+async function postRelease() {
+  const version = process.env.RELEASE_VERSION ?? "";
+  if (!version) {
+    warn("RELEASE_VERSION is not set, nothing posted");
+    return;
+  }
+  const title = process.env.RELEASE_TITLE ?? "";
+  const qa = readQaReport();
+  const result = (folder) => {
+    const counts = maestroCounts(folder);
+    if (!counts) return null;
+    return counts.failed > 0 ? "failure" : "success";
+  };
+  const android = result("maestro-android");
+  const ios = result("maestro-ios");
+  const uploads = await attach(screenshots(qa));
+  await comment([
+    paragraph(
+      strong(`Release ${version}`),
+      ...(title ? [text(` ${title}`)] : []),
+    ),
+    ...qaVerdict(qa),
+    ...(android ? maestroVerdict("Maestro", "maestro-android", android) : []),
+    ...(ios ? maestroVerdict("Maestro on iOS", "maestro-ios", ios) : []),
+    ...flowTable([
+      ["android", "Android"],
+      ...(ios ? [["ios", "iOS"]] : []),
+    ]),
+    ...attachedList(uploads),
+    ...links(),
+  ]);
+}
+
 // Anything unexpected, such as a malformed report, is a warning too.
 try {
   await resolveTarget();
   if (command === "run") await postRun();
+  else if (command === "release") await postRelease();
   else await postMerge();
 } catch (error) {
   warn(`stopped by an unexpected error: ${error.message}`);

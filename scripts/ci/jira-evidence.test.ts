@@ -736,6 +736,61 @@ describe("jira-evidence", () => {
     expect(text).not.toContain("Attached screenshots");
     expect(text).toMatch(/did not take[^\n]*\n01-home\.png\n02-detail\.png/);
   });
+  describe("release mode", () => {
+    const release = {
+      RELEASE_VERSION: "0.10.1",
+      RELEASE_TITLE: "TPOS-391 Home dashboard",
+      PR_URL: "",
+      RUN_URL: "",
+      MAESTRO_RESULT: undefined,
+    };
+
+    it("posts one comment headed by the release, with both verdicts from the reports, the flow table and every screenshot", async () => {
+      withQa(issueReport);
+      write(
+        "maestro-android/maestro-output/flows.tsv",
+        "happy-path\t.maestro/login/happy-path.yml\tLogin happy path\tsmoke,US-19-AC9\n",
+      );
+      write("maestro-android/maestro-report-happy-path.xml", junit(1, 0));
+      write("maestro-ios/maestro-report-happy-path.xml", junit(0, 1));
+      write("maestro-ios/.maestro/tests/run/failure.png", "png bytes");
+      const result = await run("release", {
+        ...release,
+        SOURCE_URL: "https://github.com/client/app/blob/v0.10.1",
+      });
+      expect(result.status).toBe(0);
+      expect(uploaded()).toEqual(["01-home.png", "02-detail.png", "failure.png"]);
+      expect(comments()).toHaveLength(1);
+      const text = commentText();
+      expect(text).toMatch(/^Release 0\.10\.1\n TPOS-391 Home dashboard/);
+      expect(text).toContain("QA agent: product issue");
+      expect(text).toContain("Maestro: passed");
+      expect(text).toContain("Maestro on iOS: failed");
+      expect(text).toContain("https://github.com/client/app/blob/v0.10.1/.maestro/login/happy-path.yml");
+      expect(text).toContain("US-19 AC 9");
+      expect(text).toContain("failure.png");
+      expect(text).not.toContain("github.com/acme");
+    });
+
+    it("leaves out iOS when the run has no iOS report", async () => {
+      withQa(passingReport);
+      write("maestro-android/maestro-report-1.xml", junit(3, 0));
+      const result = await run("release", release);
+      expect(result.status).toBe(0);
+      const text = commentText();
+      expect(text).toContain("Maestro: passed");
+      expect(text).not.toContain("iOS");
+    });
+
+    it("posts nothing and exits 0 with a warning when RELEASE_VERSION is missing", async () => {
+      withQa(passingReport);
+      const result = await run("release", { ...release, RELEASE_VERSION: undefined });
+      expect(result.status).toBe(0);
+      expect(comments()).toHaveLength(0);
+      expect(warnings(result.output).join("\n")).toContain("RELEASE_VERSION");
+    });
+  });
+
   describe("the ticket chosen by JIRA_EVIDENCE_TARGET", () => {
     const qaSubtask = { JIRA_EVIDENCE_TARGET: "qa-subtask" };
     const sub = (key: string) => ({ key });
