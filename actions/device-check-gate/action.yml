@@ -53,14 +53,17 @@ runs:
         set -euo pipefail
         # The draft state, labels and base branch are read now and not taken from the event, because a
         # re-run of an old run would carry the old event.
-        pr="$(gh pr view "$PR_NUMBER" --json isDraft,baseRefName,labels)"
+        pr="$(gh pr view "$PR_NUMBER" --json isDraft,baseRefName,labels,body)"
         BASE_REF="$(jq -r .baseRefName <<< "$pr")"
         IS_DRAFT="$(jq -r .isDraft <<< "$pr")"
         LABELS="$(jq -r '.labels[].name' <<< "$pr")"
         # A failing diff stops the step: an empty list means "no app files changed" to the script.
         git -c core.quotepath=off diff --name-only "origin/$BASE_REF" HEAD > "$RUNNER_TEMP/changed-files.txt"
         CHANGED_FILES="$RUNNER_TEMP/changed-files.txt"
-        export BASE_REF IS_DRAFT LABELS CHANGED_FILES
+        # A story PR's flows come from the story code in the description's `## Ticket` section.
+        jq -r .body <<< "$pr" > "$RUNNER_TEMP/pr-body.md"
+        PR_BODY="$RUNNER_TEMP/pr-body.md"
+        export BASE_REF IS_DRAFT LABELS CHANGED_FILES PR_BODY
         echo "base-ref=$BASE_REF" >> "$GITHUB_OUTPUT"
         if [ "$COMMAND" = "decide" ]; then
           node "$GITHUB_ACTION_PATH/../../scripts/ci/device-check-mode.mjs" decide | tee -a "$GITHUB_OUTPUT"
