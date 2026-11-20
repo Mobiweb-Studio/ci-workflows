@@ -18,6 +18,11 @@
 // folders, and a glob ending in `/` matches everything below it. A tag `*` means every flow. Every matching line
 // counts, not only the last. Without the map, or when one changed app file matches no line, every flow runs: the
 // map can narrow a run, never hide a change it does not know. The flows tagged `smoke` always run.
+//
+// A story PR (label `us`) runs the flows tagged `smoke` and the flows of its story only, whatever the impact map
+// says: the nightly regression runs every flow. The story's code (`US-21`, the spec's code, which tags its flows,
+// ADR 0025 in ICligo) is read from the `## Ticket` section of the PR's description, in the file PR_BODY (optional).
+// Without a code there, the story PR runs every flow.
 import { existsSync, readFileSync } from "node:fs";
 
 const LABEL = {
@@ -72,6 +77,16 @@ const lines = (text) =>
     .map((line) => line.trim())
     .filter(Boolean);
 
+// The spec codes (`US-21`) in the `## Ticket` section of the PR's description, without repeats.
+function readStoryCodes() {
+  const path = process.env.PR_BODY;
+  if (!path) return [];
+  const body = readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+  const section = body.match(/^## Ticket[ \t]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m);
+  if (!section) return [];
+  return [...new Set(section[1].match(/\bUS-\d+\b/g) ?? [])];
+}
+
 function readInput() {
   let changedFiles;
   try {
@@ -94,6 +109,7 @@ function readInput() {
     label,
     baseChanged: flag("BASE_CHANGED", { optional: true }),
     changedFiles,
+    storyCodes: readStoryCodes(),
   };
 }
 
@@ -165,9 +181,12 @@ function readImpact() {
 
 // Which flows the change affects: `tags` empty means every flow.
 function chooseTags(input, impact) {
+  if (input.labels.includes(LABEL.story)) {
+    return input.storyCodes.length > 0
+      ? { tags: [ALWAYS_TAG, ...input.storyCodes], reason: "story-pr" }
+      : { tags: [], reason: "story-pr-no-code" };
+  }
   if (impact === null) return { tags: [], reason: "no-impact-map" };
-  if (input.labels.includes(LABEL.story))
-    return { tags: [], reason: "story-pr" };
   const tags = new Set([ALWAYS_TAG]);
   for (const file of input.changedFiles) {
     if (!CHECKS.maestro.paths.test(file)) continue;
@@ -191,6 +210,10 @@ function describeTags(choice) {
       return `every flow: \`${choice.file}\` is not in ${map}`;
     case "maps-to-all":
       return `every flow: ${map} maps \`${choice.file}\` to all of them`;
+    case "story-pr":
+      return `the flows tagged ${choice.tags.map((tag) => `\`${tag}\``).join(", ")}, the story's and \`${ALWAYS_TAG}\` (story PR: the nightly regression runs the rest)`;
+    case "story-pr-no-code":
+      return "every flow: a story PR whose `## Ticket` section names no story code (`US-21`)";
     default:
       return null;
   }
@@ -205,8 +228,13 @@ function describe(decision, input, check) {
           : null;
       return tags ? `runs ${tags}` : "full run";
     }
-    case "story-pr":
-      return "full run (story PR)";
+    case "story-pr": {
+      const tags =
+        check === CHECKS.maestro
+          ? describeTags(chooseTags(input, readImpact()))
+          : null;
+      return tags ? `runs ${tags}` : "full run (story PR)";
+    }
     case "on-demand":
       return `runs on demand (\`${LABEL.onDemand}\`)`;
     case "skipped-by-label":

@@ -256,7 +256,7 @@ jobs:
     # skipped (a skipped job counts as passing).
     if: ${{ !cancelled() && needs.changes.outputs.run_maestro == 'true' }}
     runs-on: ${{ inputs.runner }}
-    # A full run (a story PR, or a change to the check itself) runs every flow but the nightly ones, at about a minute
+    # A full run (shared code, or a change to the check itself) runs every flow but the nightly ones, at about a minute
     # each on an Apple Silicon Mac's emulator: 45 minutes stopped one halfway.
     timeout-minutes: 100
     env:

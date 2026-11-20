@@ -16,6 +16,7 @@ type Input = {
   baseChanged?: boolean;
   files?: string[];
   impact?: string;
+  body?: string;
 };
 
 describe("device-check-mode", () => {
@@ -61,6 +62,10 @@ describe("device-check-mode", () => {
       CHANGED_FILES: listPath,
     };
     if (input.check !== undefined) env.CHECK = input.check;
+    if (input.body !== undefined) {
+      env.PR_BODY = join(dir, `body-${counter++}.md`);
+      writeFileSync(env.PR_BODY, input.body);
+    }
     if (input.impact !== undefined) {
       env.IMPACT_FILE = join(dir, `impact-${counter++}`);
       writeFileSync(env.IMPACT_FILE, input.impact);
@@ -449,8 +454,14 @@ describe("device-check-mode", () => {
       expect(text).toContain("full run");
     });
 
-    it("says a story PR is a full run because of the label", () => {
-      expect(comment({ labels: ["us"] })).toContain("full run (story PR)");
+    it("says a story PR runs the story's flows and smoke", () => {
+      const text = comment({ labels: ["us"], body: "## Ticket\n\nICLIGO-43 (US-21, XS)\n" });
+      expect(text).toContain("the flows tagged `smoke`, `US-21`, the story's and `smoke` (story PR");
+      expect(text).toContain("full run (story PR)");
+    });
+
+    it("says a story PR with no story code runs every flow", () => {
+      expect(comment({ labels: ["us"] })).toContain("every flow: a story PR whose `## Ticket` section names no story code");
     });
 
     it("says the checks were skipped by label", () => {
@@ -567,10 +578,37 @@ describe("device-check-mode", () => {
       ]);
     });
 
-    it("runs every flow on a story PR", () => {
+    const body = [
+      "## Ticket",
+      "",
+      "https://mobiweb.atlassian.net/browse/ICLIGO-43 (US-21, XS, Sprint 1). Also covers US-22 and US-21.",
+      "",
+      "## Plan",
+      "",
+      "Follows the pattern of US-30.",
+    ].join("\r\n");
+
+    it("runs smoke and the story's flows on a story PR, whatever the impact map says", () => {
       expect(
-        tags({ impact, labels: ["us"], files: ["src/pages/login/ui/LoginPage.tsx"] }),
-      ).toEqual(["tags=", "tags-reason=story-pr"]);
+        tags({ impact, body, labels: ["us"], files: ["src/shared/ui/Button.tsx", "src/app/Unmapped.tsx"] }),
+      ).toEqual(["tags=smoke US-21 US-22", "tags-reason=story-pr"]);
+    });
+
+    it("reads the story codes without an impact map too", () => {
+      expect(tags({ body, labels: ["us"] })).toEqual(["tags=smoke US-21 US-22", "tags-reason=story-pr"]);
+    });
+
+    it("runs every flow on a story PR whose Ticket section names no story code", () => {
+      for (const noCode of [undefined, "## Plan\n\nUS-21\n", "## Ticket\n\nICLIGO-43\n"]) {
+        expect(tags({ impact, body: noCode, labels: ["us"] })).toEqual(["tags=", "tags-reason=story-pr-no-code"]);
+      }
+    });
+
+    it("ignores the story code of a PR without the story label", () => {
+      expect(tags({ impact, body, files: ["src/pages/login/ui/LoginPage.tsx"] })).toEqual([
+        "tags=smoke login",
+        "tags-reason=impact",
+      ]);
     });
 
     it("runs only smoke when no app file changed", () => {
