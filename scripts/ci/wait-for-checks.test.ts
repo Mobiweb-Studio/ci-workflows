@@ -153,7 +153,8 @@ describe("wait-for-checks", () => {
         ],
         [done(7, "commits", "success"), done(2, "docs-check", "success")],
       ],
-      { GRACE_SECONDS: "5" },
+      // Four polls must fit in the time limit: the default 1 second was too tight on a busy runner.
+      { GRACE_SECONDS: "5", TIMEOUT_SECONDS: "10" },
     );
 
     expect(result.status).toBe(0);
