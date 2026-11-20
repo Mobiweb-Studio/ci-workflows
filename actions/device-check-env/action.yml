@@ -20,6 +20,10 @@ runs:
   using: composite
   steps:
     - uses: pnpm/action-setup@v6
+      with:
+        # Under RUNNER_TEMP, not the default ~/setup-pnpm: runners that share a Mac user would install over each
+        # other's pnpm at the same time.
+        dest: ${{ runner.temp }}/setup-pnpm
     - uses: actions/setup-node@v7
       with:
         node-version-file: .nvmrc
