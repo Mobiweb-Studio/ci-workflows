@@ -59,7 +59,8 @@ name: device-checks
 #                     app registration with Sites.Selected, granted write on the one site).
 #   onedrive-drive-id The document library's drive id, when `jira-evidence-storage` is `onedrive`.
 #   onedrive-folder   The folder in that library that holds the evidence, such as `ICligo/QA evidence`. Under it:
-#                     <story>/<ticket>/PR-<n>/<run id>-attempt-<k>/, and PR-<n>/merged/ on merge.
+#                     <story>/<ticket>/<YYYY-MM-DD HH-MM> PR-<n> passed|failed[ attempt <k>]/ (UTC), and
+#                     <YYYY-MM-DD HH-MM> PR-<n> merged/ on merge.
 # Secrets, passed by the caller by name from its repository secrets: CLAUDE_CODE_OAUTH_TOKEN (the `qa-agent` job),
 # JIRA_API_TOKEN (the `jira-evidence` job), MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (the same job, when
 # jira-evidence-storage is onedrive) and optionally NPM_AUTH_TOKEN (the `pnpm install` of the `apk` and
