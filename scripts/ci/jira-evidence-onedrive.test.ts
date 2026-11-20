@@ -21,7 +21,16 @@ const GRAPH_TOKEN = "graph-token-value";
 const SESSION_PATH = "/upload/session-secret-1";
 const FOLDER_URL = "https://mobiweb.sharepoint.com/sites/qa/QA%20evidence/folder";
 const LINK_URL = "https://mobiweb.sharepoint.com/:f:/s/qa/org-link";
-const RUN_FOLDER = "/graph/drives/drive-1/root:/ICligo/QA%20evidence/ICLIGO-1/ICLIGO-2/PR-7/99-attempt-2";
+// The run's folder: the story, the QA sub-task, then the time (UTC), the PR and the outcome.
+const STORY_FOLDER = "ICligo/QA evidence/ICLIGO-1/ICLIGO-2";
+const RUN_NAME = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2} PR-7 passed attempt 2$/;
+const CONTENT = ":/content?@microsoft.graph.conflictBehavior=replace";
+
+// A Graph item URL (`.../root:/<path>:/...`) as its folder up to the run's and the path inside the run's folder.
+function drivePath(url: string) {
+  const segments = decodeURIComponent(url.split("/root:/")[1].split(":/")[0]).split("/");
+  return { folder: segments.slice(0, 4).join("/"), run: segments[4], file: segments.slice(5).join("/") };
+}
 
 const qaReport = {
   status: "pass",
@@ -194,6 +203,8 @@ describe("jira-evidence with OneDrive storage", () => {
     texts(JSON.parse(comments(issue)[0].body.toString()).body).join("\n");
   const uploads = () =>
     requests.filter((request) => request.method === "PUT" && request.url.includes(":/content?"));
+  // The files stored, as paths inside the run's folder.
+  const storedFiles = () => uploads().map((request) => drivePath(request.url).file).sort();
   const tokenRequests = () => requests.filter((request) => request.url.startsWith("/login/"));
   const warnings = (output: string) =>
     output.split("\n").filter((line) => line.startsWith("::warning::"));
@@ -211,11 +222,11 @@ describe("jira-evidence with OneDrive storage", () => {
     expect(form.get("client_secret")).toBe(CLIENT_SECRET);
     expect(form.get("scope")).toBe("https://graph.microsoft.com/.default");
 
-    expect(uploads().map((request) => request.url).sort()).toEqual([
-      `${RUN_FOLDER}/qa-agent/01-home.png:/content?@microsoft.graph.conflictBehavior=replace`,
-      `${RUN_FOLDER}/qa-report.json:/content?@microsoft.graph.conflictBehavior=replace`,
-    ]);
+    expect(storedFiles()).toEqual(["qa-agent/01-home.png", "qa-report.json"]);
     for (const upload of uploads()) {
+      expect(upload.url.endsWith(CONTENT)).toBe(true);
+      expect(drivePath(upload.url).folder).toBe(STORY_FOLDER);
+      expect(drivePath(upload.url).run).toMatch(RUN_NAME);
       expect(upload.headers.authorization).toBe(`Bearer ${GRAPH_TOKEN}`);
     }
 
@@ -237,8 +248,20 @@ describe("jira-evidence with OneDrive storage", () => {
   it("names the folder after the branch's ticket in branch-ticket mode", async () => {
     withEvidence();
     await run("run", { JIRA_EVIDENCE_TARGET: undefined });
-    expect(uploads()[0].url).toContain("/QA%20evidence/ICLIGO-1/ICLIGO-1/PR-7/99-attempt-2/");
+    expect(drivePath(uploads()[0].url).folder).toBe("ICligo/QA evidence/ICLIGO-1/ICLIGO-1");
     expect(comments("ICLIGO-1")).toHaveLength(1);
+  });
+
+  it("names a first attempt without its number", async () => {
+    withEvidence();
+    await run("run", { RUN_ATTEMPT: "1" });
+    expect(drivePath(uploads()[0].url).run).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2} PR-7 passed$/);
+  });
+
+  it("names a run failed when a check failed", async () => {
+    withEvidence();
+    await run("run", { MAESTRO_RESULT: "failure" });
+    expect(drivePath(uploads()[0].url).run).toMatch(/ PR-7 failed attempt 2$/);
   });
 
   it("keeps the story in the folder when the evidence falls back to a sub-task branch's own ticket", async () => {
@@ -246,16 +269,17 @@ describe("jira-evidence with OneDrive storage", () => {
     withEvidence();
     const result = await run("run", { BRANCH: "feat/ICLIGO-3-part" });
     expect(warnings(result.output).join("\n")).toContain("no QA sub-task to post to");
-    expect(uploads()[0].url).toContain("/QA%20evidence/ICLIGO-1/ICLIGO-3/PR-7/99-attempt-2/");
+    expect(drivePath(uploads()[0].url).folder).toBe("ICligo/QA evidence/ICLIGO-1/ICLIGO-3");
     expect(comments("ICLIGO-3")).toHaveLength(1);
   });
 
-  it("stores the merge evidence in the PR's merged folder", async () => {
+  it("stores the merge evidence in a folder named for the PR's merge", async () => {
     withEvidence();
     const result = await run("merge", { RUN_ID: undefined, RUN_ATTEMPT: undefined });
     expect(result.status).toBe(0);
     expect(warnings(result.output)).toEqual([]);
-    expect(uploads()[0].url).toContain("/QA%20evidence/ICLIGO-1/ICLIGO-2/PR-7/merged/");
+    expect(drivePath(uploads()[0].url).folder).toBe(STORY_FOLDER);
+    expect(drivePath(uploads()[0].url).run).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2} PR-7 merged$/);
     const text = commentText();
     expect(text).toContain("Merged.");
     expect(text).toContain(LINK_URL);
@@ -268,7 +292,8 @@ describe("jira-evidence with OneDrive storage", () => {
     const result = await run("run");
     expect(warnings(result.output)).toEqual([]);
     const session = requests.find((request) => request.url.endsWith(":/createUploadSession"));
-    expect(session?.url).toBe(`${RUN_FOLDER}/android/big.png:/createUploadSession`);
+    expect(session?.url.endsWith("/android/big.png:/createUploadSession")).toBe(true);
+    expect(drivePath(session?.url ?? "").file).toBe("android/big.png");
     const chunks = requests.filter((request) => request.url === SESSION_PATH);
     const chunk = 10 * 320 * 1024;
     expect(chunks.map((request) => request.headers["content-range"])).toEqual([
@@ -288,13 +313,20 @@ describe("jira-evidence with OneDrive storage", () => {
       "maestro-ios/maestro-report-offline.xml",
       '<testsuites><testsuite tests="1" failures="1"><testcase name="offline"><failure>no</failure></testcase></testsuite></testsuites>',
     );
-    write("maestro-android/maestro-output/happy-path/screenshots/home.png", "png bytes");
+    write(
+      "maestro-android/maestro-output/happy-path/2026-11-16_155234/happy-path/takeScreenshot/home.png",
+      "png bytes",
+    );
+    write(
+      "maestro-ios/maestro-output/offline/2026-11-16_141003/offline/screenshots/step-030-assertCondition-list.png",
+      "png bytes",
+    );
     write("maestro-ios/.maestro/tests/2026-11-12_113444/old.png", "png bytes");
     await run("run");
-    const names = uploads().map((request) => request.url.slice(RUN_FOLDER.length + 1).split(":/content")[0]);
-    expect(names.sort()).toEqual([
-      "android/happy-path/screenshots/home.png",
+    expect(storedFiles()).toEqual([
+      "android/happy-path/home.png",
       "ios/2026-11-12_113444/old.png",
+      "ios/offline/step-030-assertCondition-list.png",
       "summary.md",
     ]);
     const summary = uploads()
@@ -307,9 +339,8 @@ describe("jira-evidence with OneDrive storage", () => {
   it("replaces the characters SharePoint refuses in a file name", async () => {
     write("maestro-android/home: list?.png", "png bytes");
     await run("run");
-    expect(uploads().map((request) => request.url)).toEqual([
-      `${RUN_FOLDER}/android/home_%20list_.png:/content?@microsoft.graph.conflictBehavior=replace`,
-    ]);
+    expect(uploads()).toHaveLength(1);
+    expect(uploads()[0].url.endsWith(`/android/home_%20list_.png${CONTENT}`)).toBe(true);
   });
 
   it("stores the other files and lists the one OneDrive refused", async () => {
