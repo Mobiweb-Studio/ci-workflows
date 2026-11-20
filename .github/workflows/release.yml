@@ -7,7 +7,7 @@ name: release
 # `release.yml`, whose job id is `release`.
 #
 # Inputs
-#   runner         The runner label for every job. Default: the Blacksmith label the boilerplate uses.
+#   runner         The runner label for every job. Default: ubuntu-latest, a GitHub-hosted runner.
 #   enabled        true to run. Off until the owner opts in. Pass `${{ vars.RELEASE_PLEASE_ENABLED == 'true' }}`.
 #                  See docs/ai/lifecycle.md ("Changelog and releases") before turning it on.
 #   config-file, manifest-file
@@ -33,7 +33,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
       enabled:
         type: boolean
         default: false

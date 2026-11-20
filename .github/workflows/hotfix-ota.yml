@@ -12,7 +12,7 @@ name: hotfix-ota
 #   android-build-id  EAS build id of the Android build live in Google Play production.
 #   ios-build-id      EAS build id of the iOS build live in the App Store.
 #   message           What this update fixes.
-#   runner            Optional. The runner label. Default: the Blacksmith label the boilerplate uses.
+#   runner            Optional. The runner label. Default: ubuntu-latest, a GitHub-hosted runner.
 # Secrets, passed by the caller by name from its repository secrets: EXPO_TOKEN, optionally SENTRY_AUTH_TOKEN for the
 # source map upload, and optionally NPM_AUTH_TOKEN for `pnpm install`, for a project with private packages on GitHub
 # Packages: the job writes its reference to a user-level .npmrc under RUNNER_TEMP (without it the variable is empty and nothing changes). The job also declares the `production-release` environment, whose required reviewers and branch
@@ -43,7 +43,7 @@ on:
         required: true
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
     secrets:
       EXPO_TOKEN:
         required: false

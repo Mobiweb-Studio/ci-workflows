@@ -9,8 +9,7 @@ name: android-regression
 #
 # Inputs
 #   runner            The runner label. The emulator needs a Linux runner with KVM and a large disk, or a self-hosted
-#                     Apple Silicon Mac with the Android SDK, as in device-checks. Default: the Blacksmith label the
-#                     boilerplate uses.
+#                     Apple Silicon Mac with the Android SDK, as in device-checks. Default: ubuntu-latest, a GitHub-hosted runner.
 #   reference-vendor  The vendor folder to test; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
 # Secrets
 #   NPM_AUTH_TOKEN    Optional, as in device-checks: the device-apk action's `pnpm install` reads it from the job's env.
@@ -26,7 +25,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
       reference-vendor:
         type: string
         default: ""

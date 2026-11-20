@@ -3,7 +3,7 @@ description: >
   Restores the native build caches and builds the release APK of the reference vendor (the repository
   variable REFERENCE_VENDOR, or "default"). Only the device-apk action calls it, on a cache miss, after it
   installed pnpm, Node, Java and the project's dependencies, so this action does not repeat them (ADR 0018).
-  Written for Linux runners (GitHub's, Blacksmith's, ADR 0017); on a self-hosted Apple Silicon Mac it builds the
+  Written for Linux runners (GitHub-hosted or self-hosted); on a self-hosted Apple Silicon Mac it builds the
   arm64-v8a APK its emulator runs and skips the Linux-only disk cleanup.
 inputs:
   reference-vendor:

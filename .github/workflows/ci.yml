@@ -5,9 +5,9 @@ name: ci
 # is `ci`, so the checks report as `ci / commits`, `ci / secret-scan`, `ci / checks` and `ci / ticket-key`.
 #
 # Inputs
-#   runner              The runner label for `checks`. Default: the Blacksmith label the boilerplate uses.
+#   runner              The runner label for `checks`. Default: ubuntu-latest, a GitHub-hosted runner.
 #   light-runner        The runner for `commits`, `secret-scan` and `ticket-key`, which only read the commits.
-#                       Default: ubuntu-latest, a GitHub-hosted runner, so they cost no Blacksmith minutes.
+#                       Default: ubuntu-latest, a GitHub-hosted runner.
 #   require-ticket-key  true to fail a feat/ or fix/ branch whose name or PR title lacks the Jira key. Pass
 #                       `${{ vars.REQUIRE_TICKET_KEY == 'true' }}`.
 #   jira-project-key    When set, only keys of this Jira project pass. Pass `${{ vars.JIRA_PROJECT_KEY }}`.
@@ -31,7 +31,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
       light-runner:
         type: string
         default: ubuntu-latest

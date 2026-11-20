@@ -58,12 +58,8 @@ describe("device-checks.yml", () => {
       expect(text).toMatch(new RegExp(`^ {4}runs-on: \\$\\{\\{ inputs\\.${input} \\}\\}$`, "m"));
     }
     expect(workflow).toMatch(/light-runner:\n {8}type: string\n {8}default: ubuntu-latest\n/);
-    expect(workflow).toMatch(
-      /runner:\n {8}type: string\n {8}default: blacksmith-[a-z0-9-]+\n/,
-    );
-    expect(workflow.replace(/default: blacksmith-[a-z0-9-]+/, "")).not.toMatch(
-      /blacksmith-[a-z0-9-]+/,
-    );
+    expect(workflow).toMatch(/ {6}runner:\n {8}type: string\n {8}default: ubuntu-latest\n/);
+    expect(workflow).not.toMatch(/blacksmith/i);
   });
 
   it("reads no repository variable and refers to no local action", () => {
