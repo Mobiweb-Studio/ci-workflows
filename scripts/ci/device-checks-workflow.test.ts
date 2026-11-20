@@ -144,7 +144,11 @@ describe("device-checks.yml", () => {
 
   it("makes the one APK with the device-apk action and holds no secret but the optional npm token", () => {
     expect(blocks.apk).toContain("ci-workflows/actions/device-apk@");
-    expect(blocks.apk).toContain("name: device-apk\n");
+    // Through the Actions cache, keyed by the run: a full artifact storage quota does not block it.
+    expect(blocks.apk).toMatch(
+      /actions\/cache\/save@v6\s+with:\s+path: android\/app\/build\/outputs\/apk\/release\/app-release\.apk\n\s+key: device-apk-\$\{\{ github\.run_id \}\}\n/,
+    );
+    expect(blocks.apk).not.toContain("upload-artifact");
     expect(blocks.apk.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
     expect(blocks.apk).not.toMatch(/^ {4}environment:/m);
   });
@@ -161,7 +165,7 @@ describe("device-checks.yml", () => {
       );
       expect(guard).toBeGreaterThan(-1);
       expect(text.indexOf("actions/checkout@v7")).toBeLessThan(guard);
-      expect(guard).toBeLessThan(text.indexOf("download-artifact"));
+      expect(guard).toBeLessThan(text.indexOf("actions/cache/restore"));
       expect(text).toContain("exit 1");
     },
   );
@@ -171,7 +175,7 @@ describe("device-checks.yml", () => {
     (name) => {
       const text = blocks[name];
       expect(text).toMatch(
-        /download-artifact@v8\s+with:\s+name: device-apk\n\s+path: android\/app\/build\/outputs\/apk\/release/,
+        /actions\/cache\/restore@v6\s+with:\s+path: android\/app\/build\/outputs\/apk\/release\/app-release\.apk\n\s+key: device-apk-\$\{\{ github\.run_id \}\}\n\s+fail-on-cache-miss: true\n/,
       );
       expect(text).toContain("ci-workflows/actions/device-check-env@");
       expect(text).not.toContain("build-android-apk");
@@ -192,7 +196,7 @@ describe("device-checks.yml", () => {
     expect(blocks[job]).not.toMatch(/retention-days: (?!15\n)/);
   });
 
-  it.each(["device-apk", "maestro-android", "qa-agent", "qa-report"])(
+  it.each(["maestro-android", "qa-agent", "qa-report"])(
     "replaces the %s artifact of an earlier attempt when a failed job is re-run",
     (artifact) => {
       const start = workflow.indexOf(`name: ${artifact}\n`);
@@ -205,9 +209,17 @@ describe("device-checks.yml", () => {
     },
   );
 
+  it("never fails a check on an upload: the reports are evidence, and the storage quota can be full", () => {
+    const uploads = workflow.split("uses: actions/upload-artifact@v7\n").slice(1);
+    expect(uploads).toHaveLength(5);
+    for (const rest of uploads) {
+      expect(rest.slice(0, rest.indexOf("with:"))).toContain("continue-on-error: true\n");
+    }
+  });
+
   it("uses one major of upload-artifact", () => {
     const versions = workflow.match(/actions\/upload-artifact@v\d+/g) ?? [];
-    expect(versions).toHaveLength(6);
+    expect(versions).toHaveLength(5);
     expect(new Set(versions)).toEqual(new Set(["actions/upload-artifact@v7"]));
   });
 
