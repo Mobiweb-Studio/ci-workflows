@@ -235,15 +235,20 @@ jobs:
         uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+      - name: Put the APK where the device jobs install it
+        env:
+          APK_PATH: ${{ steps.apk.outputs.apk-path }}
+        run: |
+          mkdir -p android/app/build/outputs/apk/release
+          cp "$APK_PATH" android/app/build/outputs/apk/release/app-release.apk
       - name: Keep the APK for the device jobs
-        uses: actions/upload-artifact@v7
+        # In the Actions cache under this run's id, not as an artifact: the cache has its own 10 GB per repository,
+        # while a full artifact storage quota blocks every upload of the organization. A re-run of this job keeps the
+        # APK the first attempt saved, which comes from the same commit.
+        uses: actions/cache/save@v6
         with:
-          name: device-apk
-          path: ${{ steps.apk.outputs.apk-path }}
-          if-no-files-found: error
-          retention-days: 1
-          # A re-run of this job in the same workflow run replaces the artifact of the earlier attempt.
-          overwrite: true
+          path: android/app/build/outputs/apk/release/app-release.apk
+          key: device-apk-${{ github.run_id }}
 
   maestro-android:
     needs: [changes, gate, apk]
@@ -273,10 +278,12 @@ jobs:
         run: |
           echo "Stopped before the device check: the gate job ended as ${GATE_RESULT} and the apk job as ${APK_RESULT}. See the gate job's log for the check that did not pass." >&2
           exit 1
-      - uses: actions/download-artifact@v8
+      - name: Get the APK the apk job made
+        uses: actions/cache/restore@v6
         with:
-          name: device-apk
-          path: android/app/build/outputs/apk/release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          key: device-apk-${{ github.run_id }}
+          fail-on-cache-miss: true
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
@@ -310,6 +317,9 @@ jobs:
       - name: Upload the Maestro report and screenshots
         if: always()
         uses: actions/upload-artifact@v7
+        # Evidence, not the verdict: a full artifact storage quota warns here and leaves the result to the
+        # steps before.
+        continue-on-error: true
         with:
           name: maestro-android
           path: |
@@ -378,6 +388,9 @@ jobs:
       - name: Upload the Maestro report and screenshots
         if: always()
         uses: actions/upload-artifact@v7
+        # Evidence, not the verdict: a full artifact storage quota warns here and leaves the result to the
+        # steps before.
+        continue-on-error: true
         with:
           name: maestro-ios
           path: |
@@ -396,6 +409,9 @@ jobs:
         id: app-upload
         if: ${{ !cancelled() && steps.app.outputs.app-path != '' }}
         uses: actions/upload-artifact@v7
+        # Evidence, not the verdict: a full artifact storage quota warns here and leaves the result to the
+        # steps before.
+        continue-on-error: true
         with:
           name: ios-simulator-app
           path: ios-simulator-app.zip
@@ -468,10 +484,12 @@ jobs:
         run: |
           echo "Stopped before the device check: the gate job ended as ${GATE_RESULT} and the apk job as ${APK_RESULT}. See the gate job's log for the check that did not pass." >&2
           exit 1
-      - uses: actions/download-artifact@v8
+      - name: Get the APK the apk job made
+        uses: actions/cache/restore@v6
         with:
-          name: device-apk
-          path: android/app/build/outputs/apk/release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          key: device-apk-${{ github.run_id }}
+          fail-on-cache-miss: true
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
@@ -529,6 +547,9 @@ jobs:
         id: upload
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
+        # Evidence, not the verdict: a full artifact storage quota warns here and leaves the result to the
+        # steps before.
+        continue-on-error: true
         with:
           name: qa-agent
           path: |
@@ -554,6 +575,9 @@ jobs:
       - name: Upload the structured report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
+        # Evidence, not the verdict: a full artifact storage quota warns here and leaves the result to the
+        # steps before.
+        continue-on-error: true
         with:
           name: qa-report
           path: |
