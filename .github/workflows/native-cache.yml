@@ -8,7 +8,7 @@ name: native-cache
 # `native-cache`.
 #
 # Inputs
-#   runner            The runner label. Default: the Blacksmith label the boilerplate uses.
+#   runner            The runner label. Default: ubuntu-latest, a GitHub-hosted runner.
 #   reference-vendor  The vendor folder to build; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
 #   ios-runner        The iOS runner, as in device-checks (a JSON array of labels or one hosted label). Empty, the
 #                     default, skips `seed-ios`. Pass the same value as the device-checks caller.
@@ -27,7 +27,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
       reference-vendor:
         type: string
         default: ""

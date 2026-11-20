@@ -5,8 +5,9 @@ import { jobs } from "./workflow-jobs";
 
 const read = (name: string) => readFileSync(join(__dirname, "..", "..", ".github", "workflows", name), "utf8");
 
-// The jobs that only read, wait or comment run on a GitHub-hosted runner by default, so the Blacksmith minutes go to
-// the jobs that build or run the app. Each job is billed by the started minute, so a job of seconds costs a minute.
+// The jobs that only read, wait or comment have their own runner input, so a project can send them to cheaper or
+// more numerous runners than the jobs that build or run the app (ICligo: the M3's light runners). Each job is billed
+// by the started minute, so a job of seconds costs a minute.
 describe("light jobs on a GitHub-hosted runner", () => {
   it.each([
     ["ci.yml", ["commits", "secret-scan", "ticket-key"], ["checks"]],
@@ -15,7 +16,7 @@ describe("light jobs on a GitHub-hosted runner", () => {
     const text = read(file);
     const blocks = jobs(text);
     expect(text).toMatch(/light-runner:\n {8}type: string\n {8}default: ubuntu-latest\n/);
-    expect(text).toMatch(/runner:\n {8}type: string\n {8}default: blacksmith-[a-z0-9-]+\n/);
+    expect(text).toMatch(/ {6}runner:\n {8}type: string\n {8}default: ubuntu-latest\n/);
     for (const name of light) expect(blocks[name]).toMatch(/^ {4}runs-on: \$\{\{ inputs\.light-runner \}\}$/m);
     for (const name of heavy) expect(blocks[name]).toMatch(/^ {4}runs-on: \$\{\{ inputs\.runner \}\}$/m);
   });

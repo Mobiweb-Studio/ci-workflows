@@ -11,9 +11,9 @@ name: device-checks
 # Inputs
 #   runner            The runner label for `apk`, `maestro-android` and `qa-agent`. The emulator jobs need a Linux runner with
 #                     KVM and a large disk, or a self-hosted Apple Silicon Mac with the Android SDK (README, "A self-hosted
-#                     Mac"). Default: the Blacksmith label the boilerplate uses.
+#                     Mac"). Default: ubuntu-latest, a GitHub-hosted runner.
 #   light-runner      The runner for `changes`, `gate`, `ios-app-link` and `jira-evidence`, which only read, wait or comment.
-#                     Default: ubuntu-latest, a GitHub-hosted runner, so they cost no Blacksmith minutes.
+#                     Default: ubuntu-latest, a GitHub-hosted runner.
 #   ios-runner        The runner for maestro-ios, which builds the app for the iOS simulator and runs the flows
 #                     tagged `ios` there: a JSON array of labels, such as '["self-hosted","macOS","ARM64","ios"]',
 #                     or one hosted label, such as macos-15. The runner needs Xcode, CocoaPods and Java 17, and a
@@ -87,7 +87,7 @@ on:
     inputs:
       runner:
         type: string
-        default: blacksmith-2vcpu-ubuntu-2404
+        default: ubuntu-latest
       light-runner:
         type: string
         default: ubuntu-latest
