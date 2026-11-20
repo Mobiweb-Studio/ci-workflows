@@ -18,10 +18,11 @@
 // JIRA_EVIDENCE_STORAGE picks where the files go. `jira`, the default, attaches the screenshots to the ticket.
 // `onedrive` uploads the screenshots and qa-report.json to a SharePoint or OneDrive document library with Microsoft
 // Graph, on every run, and the comment links the folder with a view-only link for the organization (never anonymous):
-//   <ONEDRIVE_FOLDER>/<story>/<ticket>/PR-<PR_NUMBER>/<RUN_ID>-attempt-<RUN_ATTEMPT>/   the run mode
-//   <ONEDRIVE_FOLDER>/<story>/<ticket>/PR-<PR_NUMBER>/merged/                          the merge mode
+//   <ONEDRIVE_FOLDER>/<story>/<ticket>/<YYYY-MM-DD HH-MM> PR-<PR_NUMBER> passed|failed[ attempt <k>]/   the run mode
+//   <ONEDRIVE_FOLDER>/<story>/<ticket>/<YYYY-MM-DD HH-MM> PR-<PR_NUMBER> merged/                        the merge mode
+// The time is UTC, when the files are stored, so the runs sort by name; the attempt is named only on a re-run.
 // Inside the folder the files are named for people (ADR 0022 in ICligo): summary.md (each flow's result per platform),
-// qa-report.json, android/<flow>/… and ios/<flow>/… (Maestro's screenshots), qa-agent/… (the QA agent's).
+// qa-report.json, android/<flow>/<file> and ios/<flow>/<file> (Maestro's screenshots), qa-agent/… (the QA agent's).
 // The run comment lists each Maestro flow in a table: its title linked to its file at the PR's head (SOURCE_URL, such as
 // https://github.com/<owner>/<repo>/blob/<sha>, when set), its result per platform, and the acceptance criteria its
 // tags name (`<KEY>-AC<n>`, such as `ICLIGO-22-AC4`). The flows come from `maestro-output/flows.tsv`, which
@@ -299,14 +300,20 @@ function safeSegment(name) {
 const drivePath = (segments) =>
   segments.map((segment) => encodeURIComponent(safeSegment(segment))).join("/");
 
-// The run's folder under ONEDRIVE_FOLDER, as path segments.
-function evidenceFolder() {
+// The run's folder under ONEDRIVE_FOLDER, as path segments. `outcome` is passed, failed or merged. SharePoint refuses
+// ":" in a name, so the time is written HH-MM.
+function evidenceFolder(outcome) {
   const root = (process.env.ONEDRIVE_FOLDER ?? "").split("/").filter(Boolean);
-  const run =
-    command === "run"
-      ? `${process.env.RUN_ID}-attempt-${process.env.RUN_ATTEMPT}`
-      : "merged";
-  return [...root, story, target, `PR-${process.env.PR_NUMBER}`, run];
+  const [date, time] = new Date().toISOString().split("T");
+  const attempt = Number(process.env.RUN_ATTEMPT);
+  const run = [
+    date,
+    time.slice(0, 5).replace(":", "-"),
+    `PR-${process.env.PR_NUMBER}`,
+    outcome,
+    ...(command === "run" && attempt > 1 ? ["attempt", attempt] : []),
+  ].join(" ");
+  return [...root, story, target, run];
 }
 
 async function graphToken() {
@@ -408,17 +415,18 @@ async function folderLink(token, drive, folder) {
 
 const PLATFORM_FOLDERS = { "maestro-android": "android", "maestro-ios": "ios" };
 
-// The name a file gets in the run's folder: the platform and the flow instead of the artifact's and Maestro's
-// folders. `maestro-android/maestro-output/<flow>/<file>` is `android/<flow>/<file>`; Maestro's older timestamped
-// output, `.maestro/tests/<time>/`, keeps only the time.
+// The name a file gets in the run's folder: the platform, the flow and the file, without the artifact's and
+// Maestro's folders. Maestro writes `maestro-output/<flow>/<time>/<flow>/screenshots|takeScreenshot/<file>`, and it
+// is stored as `android/<flow>/<file>`; Maestro's older output, `.maestro/tests/<time>/<file>`, as `<time>/<file>`.
 function storedName(name) {
   const [artifact, ...rest] = name.split(sep);
   if (Object.hasOwn(PLATFORM_FOLDERS, artifact)) {
-    const inner = rest.join(sep).replace(
-      new RegExp(`^(?:maestro-output|\\.maestro\\${sep}tests)\\${sep}`),
-      "",
-    );
-    return join(PLATFORM_FOLDERS[artifact], inner);
+    const inner = rest
+      .join(sep)
+      .replace(new RegExp(`^(?:maestro-output|\\.maestro\\${sep}tests)\\${sep}`), "")
+      .split(sep);
+    const kept = inner.length > 2 ? [inner[0], inner.at(-1)] : inner;
+    return join(PLATFORM_FOLDERS[artifact], ...kept);
   }
   if (artifact === "qa-agent" && rest[0] === "qa-artifacts")
     return join("qa-agent", ...rest.slice(1));
@@ -495,8 +503,8 @@ function summaryFile() {
 
 // Uploads the files to the run's folder, each in its own request so one refused file does not drop the others, and
 // stops at the first call Microsoft does not answer. Returns the folder's link (null when nothing was stored) and the
-// names stored and not.
-async function store(files) {
+// names stored and not. `outcome` names the folder (evidenceFolder).
+async function store(files, outcome) {
   const names = files.map((file) =>
     file.startsWith(evidenceDir + sep)
       ? storedName(relative(evidenceDir, file))
@@ -510,7 +518,7 @@ async function store(files) {
     "MS_CLIENT_SECRET",
     "MS_DRIVE_ID",
     "PR_NUMBER",
-    ...(command === "run" ? ["RUN_ID", "RUN_ATTEMPT"] : []),
+    ...(command === "run" ? ["RUN_ATTEMPT"] : []),
   ]) {
     if (!process.env[name]) {
       warn(`${name} is not set, the evidence is not stored`);
@@ -520,7 +528,7 @@ async function store(files) {
   const token = await graphToken();
   if (!token) return none;
   const drive = process.env.MS_DRIVE_ID;
-  const folder = evidenceFolder();
+  const folder = evidenceFolder(outcome);
   const stored = [];
   const failed = [];
   let reachable = true;
@@ -905,11 +913,10 @@ async function postRun() {
   const evidence =
     storage === "onedrive"
       ? storedList(
-          await store([
-            ...summaryFile(),
-            ...screenshots(qa),
-            ...qaReportFile(),
-          ]),
+          await store(
+            [...summaryFile(), ...screenshots(qa), ...qaReportFile()],
+            flagged ? "failed" : "passed",
+          ),
         )
       : attachedList(
           flagged
@@ -941,11 +948,10 @@ async function postMerge() {
     return;
   }
   if (storage === "onedrive") {
-    const stored = await store([
-      ...summaryFile(),
-      ...files,
-      ...qaReportFile(),
-    ]);
+    const stored = await store(
+      [...summaryFile(), ...files, ...qaReportFile()],
+      "merged",
+    );
     if (!stored.url) return;
     await comment([
       paragraph(
