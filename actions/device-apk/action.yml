@@ -5,10 +5,19 @@ description: >
   fingerprint: on a hit it repacks that APK with this commit's JS (`@expo/repack-app`, about 30 seconds), on a miss
   it builds one with build-android-apk and caches it under the fingerprint. The key also names the vendor, so a
   different vendor or any native change is a miss (scripts/ci/device-apk-key.mjs, ADR 0017). Needs the checkout
-  done and no `android/` folder, because an existing native folder changes the fingerprint.
+  done and no `android/` folder, because an existing native folder changes the fingerprint. With `app-env` it builds
+  for that app environment (APP_ENV) and the key names it, so a dev APK never serves a prod run. It sets APP_ID and
+  APP_SCHEME for the later steps from the resolved Expo config (scripts/ci/app-identity.mjs), not from vendor.json,
+  so they follow the project's own rules, such as a `.dev` suffix.
 inputs:
   reference-vendor:
     description: The vendor folder to build; empty means "default".
+    required: false
+    default: ""
+  app-env:
+    description: >
+      The project's app environment to build, exported as APP_ENV, such as `dev`. Empty leaves APP_ENV unset, so
+      the app builds as the project's default (prod), as before the input existed.
     required: false
     default: ""
 outputs:
@@ -18,6 +27,12 @@ outputs:
   source:
     description: "`repacked` or `built`."
     value: ${{ steps.result.outputs.source }}
+  app-id:
+    description: The app's Android package, from the resolved Expo config (also exported as APP_ID).
+    value: ${{ steps.identity.outputs.APP_ID }}
+  app-scheme:
+    description: The app's URL scheme, from the same config; empty when it has none (also exported as APP_SCHEME).
+    value: ${{ steps.identity.outputs.APP_SCHEME }}
 
 runs:
   using: composite
@@ -59,10 +74,13 @@ runs:
       shell: bash
       env:
         REFERENCE_VENDOR: ${{ inputs.reference-vendor }}
+        INPUT_APP_ENV: ${{ inputs.app-env }}
       run: |
         VENDOR="${REFERENCE_VENDOR:-default}"
         echo "VENDOR=$VENDOR" >> "$GITHUB_ENV"
         echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
+        # Before the fingerprint, the key and the repack, which all read the app config from this environment.
+        if [ -n "$INPUT_APP_ENV" ]; then echo "APP_ENV=$INPUT_APP_ENV" >> "$GITHUB_ENV"; fi
     - name: Compute the native fingerprint and the cache key
       id: key
       shell: bash
@@ -73,6 +91,17 @@ runs:
         # The version is the one the installed Expo SDK uses.
         npx --yes @expo/fingerprint@0.20.13 fingerprint:generate --platform android > "$RUNNER_TEMP/fingerprint.json"
         echo "key=$(node "$GITHUB_ACTION_PATH/../../scripts/ci/device-apk-key.mjs" "$VENDOR" < "$RUNNER_TEMP/fingerprint.json")" >> "$GITHUB_OUTPUT"
+    - name: Read the app's package and scheme from the resolved config
+      # After the fingerprint, which a generated .expo folder could change. The config is the one prebuild and the
+      # repack read, with APP_VARIANT, APP_ENV and the switches above, so APP_ID follows the project's own rules.
+      id: identity
+      shell: bash
+      run: |
+        pnpm exec expo config --json > "$RUNNER_TEMP/expo-config.json"
+        node "$GITHUB_ACTION_PATH/../../scripts/ci/app-identity.mjs" android < "$RUNNER_TEMP/expo-config.json" > "$RUNNER_TEMP/app-identity.env"
+        cat "$RUNNER_TEMP/app-identity.env" >> "$GITHUB_ENV"
+        cat "$RUNNER_TEMP/app-identity.env" >> "$GITHUB_OUTPUT"
+        cat "$RUNNER_TEMP/app-identity.env"
     - name: Look for a cached APK with this fingerprint
       id: cache
       uses: actions/cache/restore@v6
@@ -99,6 +128,7 @@ runs:
       uses: Mobiweb-Studio/ci-workflows/actions/build-android-apk@main
       with:
         reference-vendor: ${{ inputs.reference-vendor }}
+        app-env: ${{ inputs.app-env }}
     - name: Keep the new APK for the next runs with this fingerprint
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       shell: bash

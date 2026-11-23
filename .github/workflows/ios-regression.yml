@@ -11,6 +11,9 @@ name: ios-regression
 #   ios-runner        The iOS runner, as in device-checks (a JSON array of labels or one hosted label). Empty skips
 #                     the job, so a project without one can keep the caller.
 #   reference-vendor  The vendor folder to test; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
+#   app-env           The project's app environment to build and test, such as `dev`, exported as APP_ENV to the
+#                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
+#                     (prod) as before. APP_ID comes from the resolved Expo config either way, so a `.dev` id is right.
 #   runtimes          A JSON array of iOS versions, such as '["27.1","26.4"]', each installed on the runner;
 #                     "newest" is the newest one installed. Default: '["newest"]'. A version the runner lacks fails
 #                     its job with the list of what is installed.
@@ -38,6 +41,9 @@ on:
         type: string
         default: ""
       reference-vendor:
+        type: string
+        default: ""
+      app-env:
         type: string
         default: ""
       runtimes:
@@ -90,6 +96,7 @@ jobs:
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
           platform: ios
       - id: app
         uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main

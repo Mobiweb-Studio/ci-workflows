@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Runs the Maestro flows every vendor has, plus the ones only the vendor under test has.
 # Needs APP_VARIANT (the vendor) and APP_ID (its Android package, or its iOS bundle id). Its own file because the
-# emulator action runs a script one line at a time.
+# emulator action runs a script one line at a time. APP_ID and, when the app has one, APP_SCHEME (its URL scheme, for
+# deep links) reach the flows as `${APP_ID}` and `${APP_SCHEME}`; device-apk and device-ios-app read both from the
+# app's resolved Expo config, so they carry the app environment's suffix (`.dev`).
 #
 # Where the flows are: a project with `.maestro/flows/` keeps every flow there. A project without it keeps one folder
 # per feature, `.maestro/<feature>/*.yml`; a folder whose name starts with `_` (shared subflows) is not run on its own.
@@ -34,6 +36,9 @@ exclude_value="${MAESTRO_EXCLUDE_TAGS:-}"
 # expanded after their length is checked.
 read -r -a include_tags <<< "${include_value//,/ }" || true
 read -r -a exclude_tags <<< "${exclude_value//,/ }" || true
+
+flow_env=(-e "APP_ID=$APP_ID")
+if [ -n "${APP_SCHEME:-}" ]; then flow_env+=(-e "APP_SCHEME=$APP_SCHEME"); fi
 
 shopt -s nullglob
 if [ -d .maestro/flows ]; then
@@ -110,12 +115,12 @@ for flow in ${flows[@]+"${flows[@]}"}; do
     fi
     xcrun simctl terminate "$IOS_UDID" "$APP_ID" 2>/dev/null || true
     sleep 2
-    maestro --device "$IOS_UDID" test -e APP_ID="$APP_ID" "$flow" --format junit --output "maestro-report-$name.xml" \
+    maestro --device "$IOS_UDID" test "${flow_env[@]}" "$flow" --format junit --output "maestro-report-$name.xml" \
       --test-output-dir "$output" || failed=1
   else
     adb shell am force-stop "$APP_ID"
     sleep 3
-    maestro test -e APP_ID="$APP_ID" "$flow" --format junit --output "maestro-report-$name.xml" \
+    maestro test "${flow_env[@]}" "$flow" --format junit --output "maestro-report-$name.xml" \
       --test-output-dir "$output" || failed=1
   fi
   IFS=$'\037' read -r title tags <<< "$(flow_details "$flow")" || true

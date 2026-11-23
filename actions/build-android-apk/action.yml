@@ -1,13 +1,20 @@
 name: Build the Android release APK
 description: >
   Restores the native build caches and builds the release APK of the reference vendor (the repository
-  variable REFERENCE_VENDOR, or "default"). Only the device-apk action calls it, on a cache miss, after it
+  variable REFERENCE_VENDOR, or "default") for the app environment in `app-env` (APP_ENV; empty builds the
+  project's default, which is prod). It does not set APP_ID: device-apk reads it from the resolved Expo config. Only the device-apk action calls it, on a cache miss, after it
   installed pnpm, Node, Java and the project's dependencies, so this action does not repeat them (ADR 0018).
   Written for Linux runners (GitHub-hosted or self-hosted); on a self-hosted Apple Silicon Mac it builds the
   arm64-v8a APK its emulator runs and skips the Linux-only disk cleanup.
 inputs:
   reference-vendor:
     description: The vendor folder to build; empty means "default".
+    required: false
+    default: ""
+  app-env:
+    description: >
+      The project's app environment to build, exported as APP_ENV, such as `dev`. Empty leaves APP_ENV unset, so
+      the app builds as the project's default (prod), as before the input existed.
     required: false
     default: ""
 
@@ -33,13 +40,14 @@ runs:
       shell: bash
       env:
         REFERENCE_VENDOR: ${{ inputs.reference-vendor }}
+        INPUT_APP_ENV: ${{ inputs.app-env }}
       run: |
         VENDOR="${REFERENCE_VENDOR:-default}"
         echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
-        echo "APP_ID=$(node -p "require('./vendors/$VENDOR/vendor.json').identity.androidPackage")" >> "$GITHUB_ENV"
+        if [ -n "$INPUT_APP_ENV" ]; then echo "APP_ENV=$INPUT_APP_ENV" >> "$GITHUB_ENV"; fi
     - name: Keep Sentry and the real sign-in out of the device checks
-      # The APK is built with no APP_ENV, so a reference vendor with a Sentry DSN would report its test
-      # runs as production. It also has no upload token to give the Sentry plugin (ADR 0021).
+      # By default the APK is built with no APP_ENV, which is prod, so a reference vendor with a Sentry DSN would
+      # report its test runs as production; with an app-env they are still test runs. It also has no upload token to give the Sentry plugin (ADR 0021).
       # AUTH_SOURCE=mock keeps a project's mock sign-in, whose fixed answers the Maestro flows rely on,
       # when its vendor signs in for real; a project that does not read it is unaffected.
       shell: bash

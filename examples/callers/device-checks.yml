@@ -29,6 +29,9 @@ jobs:
     uses: Mobiweb-Studio/ci-workflows/.github/workflows/device-checks.yml@v1
     with:
       reference-vendor: ${{ vars.REFERENCE_VENDOR }}
+      # The project's app environment to build and test, such as dev, so the flows sign in to its backend with its
+      # test users. Empty or absent builds the project's default (prod), as before. Use the same value in every device caller (device-checks, native-cache and the regressions):
+      # app-env: dev
       # Empty skips maestro-ios. For a self-hosted Mac: '["self-hosted","macOS","ARM64","ios"]'.
       ios-runner: ${{ vars.IOS_RUNNER }}
       jira-evidence: ${{ vars.JIRA_EVIDENCE == 'true' }}

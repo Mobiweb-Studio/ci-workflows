@@ -1,11 +1,14 @@
 name: Device check environment
 description: >
   Leaves a device job in the state the Maestro and QA agent scripts need when the APK did not come from
-  build-android-apk: pnpm and Node installed, and APP_VARIANT and APP_ID exported for the reference vendor
-  (the repository variable REFERENCE_VENDOR, or "default"). The project's dependencies are not installed,
-  because neither run-maestro.sh nor the QA agent's scripts read them. The vendor lines match the ones in
-  build-android-apk, which also seeds the native caches and so stays self-contained. With platform `ios`, APP_ID is
-  the vendor's iOS bundle id instead of its Android package.
+  build-android-apk: pnpm and Node installed, and APP_VARIANT, APP_ENV, APP_ID and APP_SCHEME exported for the
+  reference vendor (the repository variable REFERENCE_VENDOR, or "default"). The project's dependencies are not
+  installed, because neither run-maestro.sh nor the QA agent's scripts read them, so the ids come from the job that
+  built the app: pass device-apk's `app-id` and `app-scheme` outputs, which it read from the resolved Expo config.
+  Without `app-id`, APP_ID is the vendor's unsuffixed id from vendor.json (`identity.androidPackage`, or with
+  platform `ios` `identity.iosBundleId`), which is only right for the default (prod) build; with platform `ios`,
+  device-ios-app then replaces it with the resolved one. An Android job with an `app-env` and no `app-id` stops,
+  because the unsuffixed id would name an app that is not installed.
 inputs:
   reference-vendor:
     description: The vendor folder under test; empty means "default".
@@ -15,6 +18,20 @@ inputs:
     description: android or ios; chooses which of the vendor's ids APP_ID gets.
     required: false
     default: android
+  app-env:
+    description: >
+      The project's app environment the app was built for, exported as APP_ENV, such as `dev`. Empty leaves it
+      unset (the project's default, prod). The same value the job that built the app was given.
+    required: false
+    default: ""
+  app-id:
+    description: The app's id from the resolved Expo config (device-apk's `app-id` output). Empty reads vendor.json.
+    required: false
+    default: ""
+  app-scheme:
+    description: The app's URL scheme from the same config (device-apk's `app-scheme` output), exported as APP_SCHEME.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -32,6 +49,9 @@ runs:
       env:
         REFERENCE_VENDOR: ${{ inputs.reference-vendor }}
         PLATFORM: ${{ inputs.platform }}
+        INPUT_APP_ENV: ${{ inputs.app-env }}
+        INPUT_APP_ID: ${{ inputs.app-id }}
+        INPUT_APP_SCHEME: ${{ inputs.app-scheme }}
       run: |
         VENDOR="${REFERENCE_VENDOR:-default}"
         case "$PLATFORM" in
@@ -40,4 +60,14 @@ runs:
           *) echo "Unknown platform \"$PLATFORM\": use android or ios." >&2; exit 1 ;;
         esac
         echo "APP_VARIANT=$VENDOR" >> "$GITHUB_ENV"
+        if [ -n "$INPUT_APP_ENV" ]; then echo "APP_ENV=$INPUT_APP_ENV" >> "$GITHUB_ENV"; fi
+        if [ -n "$INPUT_APP_ID" ]; then
+          echo "APP_ID=$INPUT_APP_ID" >> "$GITHUB_ENV"
+          echo "APP_SCHEME=$INPUT_APP_SCHEME" >> "$GITHUB_ENV"
+          exit 0
+        fi
+        if [ -n "$INPUT_APP_ENV" ] && [ "$PLATFORM" = android ]; then
+          echo "app-env is \"$INPUT_APP_ENV\" but no app-id was given: pass device-apk's app-id output." >&2
+          exit 1
+        fi
         echo "APP_ID=$(node -p "require('./vendors/$VENDOR/vendor.json').identity.$ID_FIELD")" >> "$GITHUB_ENV"

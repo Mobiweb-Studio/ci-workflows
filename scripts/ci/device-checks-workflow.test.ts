@@ -262,9 +262,9 @@ describe("device-checks.yml", () => {
       expect(text).not.toMatch(/^ {4}environment:/m);
     });
 
-    it("gets the app itself, repacked by fingerprint or built, for the vendor's iOS bundle id", () => {
+    it("gets the app itself, repacked by fingerprint or built, for the app environment's iOS bundle id", () => {
       expect(text).not.toContain("actions/device-apk@");
-      expect(text).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+platform: ios\n/);
+      expect(text).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+app-env: \$\{\{ inputs\.app-env \}\}\n\s+platform: ios\n/);
       expect(text).toContain("ci-workflows/actions/device-ios-app@");
       expect(text).toContain("app-source: ${{ steps.app.outputs.source }}");
     });

@@ -10,6 +10,10 @@ name: native-cache
 # Inputs
 #   runner            The runner label. Default: ubuntu-latest, a GitHub-hosted runner.
 #   reference-vendor  The vendor folder to build; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
+#   app-env           The project's app environment to build and test, such as `dev`, exported as APP_ENV to the
+#                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
+#                     (prod) as before. Pass the same value as the device-checks caller: the cached app's key names
+#                     it, so a cache seeded for another environment is never used by the PRs.
 #   ios-runner        The iOS runner, as in device-checks (a JSON array of labels or one hosted label). Empty, the
 #                     default, skips `seed-ios`. Pass the same value as the device-checks caller.
 # Secrets
@@ -31,6 +35,9 @@ on:
       reference-vendor:
         type: string
         default: ""
+      app-env:
+        type: string
+        default: ""
       ios-runner:
         type: string
         default: ""
@@ -50,6 +57,7 @@ jobs:
       - uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
 
   seed-ios:
     # The iOS twin of `seed`. The runner can be a shared self-hosted Mac, so its only secret is the optional npm
@@ -64,5 +72,6 @@ jobs:
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
           platform: ios
       - uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main

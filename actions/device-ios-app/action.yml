@@ -1,11 +1,13 @@
 name: Get the device-check iOS app
 description: >
-  Leaves one Release app for the iOS simulator of the vendor in APP_VARIANT at `app-path`. It computes the native
+  Leaves one Release app for the iOS simulator of the vendor in APP_VARIANT, built for the app environment in
+  APP_ENV (unset: the project's default, prod), at `app-path`, and sets APP_ID and APP_SCHEME for the later steps
+  from the resolved Expo config (scripts/ci/app-identity.mjs), so a `.dev` bundle id is the one Maestro launches. It computes the native
   fingerprint of a fresh checkout and looks for a cached app with the same fingerprint: on a hit it repacks that app
   with this commit's JS (`@expo/repack-app`, about 25 seconds), on a miss it builds one with build-ios-simulator-app
   and caches it under the fingerprint. The key names the platform and the vendor too, so another vendor or any
-  native change is a miss (scripts/ci/device-apk-key.mjs). Needs device-check-env with platform `ios` run first
-  (Node, pnpm, APP_VARIANT), the checkout done and no `ios/` folder, because an existing native folder changes the
+  native change is a miss (scripts/ci/device-apk-key.mjs), and it names APP_ENV when set. Needs device-check-env
+  with platform `ios` run first (Node, pnpm, APP_VARIANT, APP_ENV), the checkout done and no `ios/` folder, because an existing native folder changes the
   fingerprint. The iOS twin of device-apk.
 outputs:
   app-path:
@@ -14,13 +16,19 @@ outputs:
   source:
     description: "`repacked` or `built`."
     value: ${{ steps.result.outputs.source }}
+  app-id:
+    description: The app's iOS bundle id, from the resolved Expo config (also exported as APP_ID).
+    value: ${{ steps.identity.outputs.APP_ID }}
+  app-scheme:
+    description: The app's URL scheme, from the same config; empty when it has none (also exported as APP_SCHEME).
+    value: ${{ steps.identity.outputs.APP_SCHEME }}
 
 runs:
   using: composite
   steps:
     - name: Switch crash reporting, the source map upload and the real sign-in off, as for the CI APK
-      # The device-check app is built with no APP_ENV and no Sentry upload token, and keeps the mock sign-in
-      # (see build-android-apk).
+      # The device-check app has no Sentry upload token, its runs are test runs whatever APP_ENV it is built for,
+      # and it keeps the mock sign-in (see build-android-apk).
       shell: bash
       run: |
         echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
@@ -47,6 +55,17 @@ runs:
         # The version is the one the installed Expo SDK uses, as in device-apk.
         npx --yes @expo/fingerprint@0.20.13 fingerprint:generate --platform ios > "$RUNNER_TEMP/fingerprint-ios.json"
         echo "key=$(node "$GITHUB_ACTION_PATH/../../scripts/ci/device-apk-key.mjs" "$APP_VARIANT" ios < "$RUNNER_TEMP/fingerprint-ios.json")" >> "$GITHUB_OUTPUT"
+    - name: Read the app's bundle id and scheme from the resolved config
+      # After the fingerprint, which a generated .expo folder could change. The config is the one prebuild reads,
+      # with APP_VARIANT, APP_ENV and the switches above, so APP_ID follows the project's own rules (a `.dev` suffix).
+      id: identity
+      shell: bash
+      run: |
+        pnpm exec expo config --json > "$RUNNER_TEMP/expo-config-ios.json"
+        node "$GITHUB_ACTION_PATH/../../scripts/ci/app-identity.mjs" ios < "$RUNNER_TEMP/expo-config-ios.json" > "$RUNNER_TEMP/app-identity-ios.env"
+        cat "$RUNNER_TEMP/app-identity-ios.env" >> "$GITHUB_ENV"
+        cat "$RUNNER_TEMP/app-identity-ios.env" >> "$GITHUB_OUTPUT"
+        cat "$RUNNER_TEMP/app-identity-ios.env"
     - name: Look for a cached app with this fingerprint
       id: cache
       uses: actions/cache/restore@v6

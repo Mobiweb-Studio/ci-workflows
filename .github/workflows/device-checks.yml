@@ -30,6 +30,9 @@ name: device-checks
 #                     (jira-evidence-storage `jira`) and merges PRs days after their last push can raise it.
 #   reference-vendor  The vendor folder to build and test; empty means "default". Pass
 #                     `${{ vars.REFERENCE_VENDOR }}`.
+#   app-env           The project's app environment to build and test, such as `dev`, exported as APP_ENV to the
+#                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
+#                     (prod) as before. APP_ID comes from the resolved Expo config either way, so a `.dev` id is right.
 #   maestro, qa-agent true by default. A project that declined a device check (docs/modules in the boilerplate)
 #                     passes false, and that check never runs: its job is skipped and the shared APK is made
 #                     only for the other one.
@@ -98,6 +101,9 @@ on:
         type: number
         default: 3
       reference-vendor:
+        type: string
+        default: ""
+      app-env:
         type: string
         default: ""
       maestro:
@@ -227,6 +233,10 @@ jobs:
     if: ${{ needs.changes.outputs.run_maestro == 'true' || needs.changes.outputs.run_qa == 'true' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 45
+    # The app's id and scheme from the resolved Expo config, for the device jobs, which do not install the project.
+    outputs:
+      app-id: ${{ steps.apk.outputs.app-id }}
+      app-scheme: ${{ steps.apk.outputs.app-scheme }}
     env:
       NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
@@ -235,6 +245,7 @@ jobs:
         uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
       - name: Put the APK where the device jobs install it
         env:
           APK_PATH: ${{ steps.apk.outputs.apk-path }}
@@ -289,6 +300,9 @@ jobs:
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
+          app-id: ${{ needs.apk.outputs.app-id }}
+          app-scheme: ${{ needs.apk.outputs.app-scheme }}
       - name: Enable KVM for the emulator
         # Linux only: on an Apple Silicon Mac the emulator uses macOS's own hypervisor, with no setup.
         if: ${{ runner.os == 'Linux' }}
@@ -369,6 +383,7 @@ jobs:
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
           platform: ios
       - id: app
         uses: Mobiweb-Studio/ci-workflows/actions/device-ios-app@main
@@ -496,6 +511,9 @@ jobs:
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
+          app-id: ${{ needs.apk.outputs.app-id }}
+          app-scheme: ${{ needs.apk.outputs.app-scheme }}
       - name: Enable KVM for the emulator
         # Linux only: on an Apple Silicon Mac the emulator uses macOS's own hypervisor, with no setup.
         if: ${{ runner.os == 'Linux' }}
