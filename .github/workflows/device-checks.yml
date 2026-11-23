@@ -307,6 +307,9 @@ jobs:
           api-level: 34
           # x86_64 on Linux, arm64-v8a on an Apple Silicon Mac: the apk job built the APK for the same one.
           arch: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
+          # A phone screen (1080x2400, 420 dpi). Without a profile the AVD gets Android's default 320x640 at
+          # 160 dpi, where a screen's lower buttons sit under the app's tab bar and flows time out.
+          profile: pixel_6
           disable-animations: true
           script: |
             adb install android/app/build/outputs/apk/release/app-release.apk
@@ -536,6 +539,9 @@ jobs:
           api-level: 34
           # x86_64 on Linux, arm64-v8a on an Apple Silicon Mac: the apk job built the APK for the same one.
           arch: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
+          # A phone screen (1080x2400, 420 dpi). Without a profile the AVD gets Android's default 320x640 at
+          # 160 dpi, where a screen's lower buttons sit under the app's tab bar and flows time out.
+          profile: pixel_6
           disable-animations: true
           script: |
             adb install android/app/build/outputs/apk/release/app-release.apk
