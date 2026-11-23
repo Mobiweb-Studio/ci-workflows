@@ -11,6 +11,9 @@ name: android-regression
 #   runner            The runner label. The emulator needs a Linux runner with KVM and a large disk, or a self-hosted
 #                     Apple Silicon Mac with the Android SDK, as in device-checks. Default: ubuntu-latest, a GitHub-hosted runner.
 #   reference-vendor  The vendor folder to test; empty means "default". Pass `${{ vars.REFERENCE_VENDOR }}`.
+#   app-env           The project's app environment to build and test, such as `dev`, exported as APP_ENV to the
+#                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
+#                     (prod) as before. APP_ID comes from the resolved Expo config either way, so a `.dev` id is right.
 # Secrets
 #   NPM_AUTH_TOKEN    Optional, as in device-checks: the device-apk action's `pnpm install` reads it from the job's env.
 #   MAESTRO_ENV       Optional, by name from the caller's repository secrets: the flows' variables, one
@@ -27,6 +30,9 @@ on:
         type: string
         default: ubuntu-latest
       reference-vendor:
+        type: string
+        default: ""
+      app-env:
         type: string
         default: ""
     secrets:
@@ -64,9 +70,13 @@ jobs:
         uses: Mobiweb-Studio/ci-workflows/actions/device-apk@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
       - uses: Mobiweb-Studio/ci-workflows/actions/device-check-env@main
         with:
           reference-vendor: ${{ inputs.reference-vendor }}
+          app-env: ${{ inputs.app-env }}
+          app-id: ${{ steps.apk.outputs.app-id }}
+          app-scheme: ${{ steps.apk.outputs.app-scheme }}
       - name: Enable KVM for the emulator
         # Linux only: on an Apple Silicon Mac the emulator uses macOS's own hypervisor, with no setup.
         if: ${{ runner.os == 'Linux' }}

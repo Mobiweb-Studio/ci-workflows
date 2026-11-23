@@ -64,6 +64,15 @@ describe("run-maestro.sh", () => {
     expect(calls.some((c) => c.startsWith("xcrun"))).toBe(false);
   });
 
+  it("gives the flows APP_ID, and APP_SCHEME only when the app has one", () => {
+    flow("one", "");
+    expect(run().calls.find((c) => c.startsWith("maestro "))).toContain("test -e APP_ID=com.example.app .maestro/flows/one.yml");
+    const withScheme = run({ APP_ID: "com.example.app.dev", APP_SCHEME: "example.dev" });
+    expect(withScheme.calls.find((c) => c.startsWith("maestro "))).toContain(
+      "test -e APP_ID=com.example.app.dev -e APP_SCHEME=example.dev .maestro/flows/one.yml",
+    );
+  });
+
   it("runs only the flows tagged ios on iOS, on the job's simulator", () => {
     flow("inline", "tags: [smoke, ios]\n");
     flow("listed", "tags:\n  - smoke\n  - ios\n");

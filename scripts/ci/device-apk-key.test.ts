@@ -6,11 +6,19 @@ const hashA = "a".repeat(40);
 const hashB = `b${"a".repeat(39)}`;
 
 function key(vendor: string, input: string, ...rest: string[]) {
-  return spawnSync("node", [script, vendor, ...rest], { input, encoding: "utf8", env: { ...process.env, DEVICE_APK_ABI: "" } });
+  return spawnSync("node", [script, vendor, ...rest], { input, encoding: "utf8", env: { ...process.env, DEVICE_APK_ABI: "", APP_ENV: "" } });
+}
+
+function keyForEnv(appEnv: string, input: string, ...rest: string[]) {
+  return spawnSync("node", [script, "default", ...rest], {
+    input,
+    encoding: "utf8",
+    env: { ...process.env, DEVICE_APK_ABI: "", APP_ENV: appEnv },
+  });
 }
 
 function keyFor(abi: string, input: string) {
-  return spawnSync("node", [script, "default"], { input, encoding: "utf8", env: { ...process.env, DEVICE_APK_ABI: abi } });
+  return spawnSync("node", [script, "default"], { input, encoding: "utf8", env: { ...process.env, DEVICE_APK_ABI: abi, APP_ENV: "" } });
 }
 
 describe("device-apk-key", () => {
@@ -78,6 +86,20 @@ describe("device-apk-key", () => {
 
   it("stops with an error on an unknown platform", () => {
     const result = key("default", JSON.stringify({ hash: hashA }), "web");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+  });
+
+  it("names APP_ENV in the key, so a dev app and a prod one never share a cached build", () => {
+    const input = JSON.stringify({ hash: hashA });
+    expect(keyForEnv("dev", input).stdout).toBe(`device-apk-v1-x86_64-default.dev-${hashA}\n`);
+    expect(keyForEnv("dev", input, "ios").stdout).toBe(`device-app-ios-v2-simulator-default.dev-${hashA}\n`);
+    expect(keyForEnv("staging", input).stdout).not.toBe(keyForEnv("dev", input).stdout);
+    expect(keyForEnv("", input).stdout).toBe(`device-apk-v1-x86_64-default-${hashA}\n`);
+  });
+
+  it("stops with an error on an APP_ENV that is not a plain name", () => {
+    const result = keyForEnv("dev/../x", JSON.stringify({ hash: hashA }));
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
   });

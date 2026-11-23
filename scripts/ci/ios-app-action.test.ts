@@ -73,7 +73,7 @@ describe("native-cache seed-ios", () => {
   });
 
   it("fills the same cache device-checks reads, with no secret but the optional npm token", () => {
-    expect(text).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+platform: ios\n/);
+    expect(text).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+app-env: \$\{\{ inputs\.app-env \}\}\n\s+platform: ios\n/);
     expect(text).toContain("ci-workflows/actions/device-ios-app@");
     expect(text.match(/secrets\.[A-Z_]+/g)).toEqual(["secrets.NPM_AUTH_TOKEN"]);
   });
@@ -121,7 +121,7 @@ describe("ios-regression.yml", () => {
   });
 
   it("uses the same app as device-checks' maestro-ios", () => {
-    expect(regression).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+platform: ios\n/);
+    expect(regression).toMatch(/device-check-env@main\n\s+with:\n\s+reference-vendor: .+\n\s+app-env: \$\{\{ inputs\.app-env \}\}\n\s+platform: ios\n/);
     expect(regression).toContain("ci-workflows/actions/device-ios-app@");
   });
 });

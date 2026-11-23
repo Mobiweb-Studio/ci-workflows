@@ -2,7 +2,8 @@ name: Build the iOS simulator app
 description: >
   Builds the app for the iOS simulator from the commit under test, on a macOS runner with Xcode and CocoaPods
   installed: installs the project's dependencies, generates the iOS project
-  for the vendor in APP_VARIANT (set by device-check-env), installs the pods and builds the Release configuration
+  for the vendor in APP_VARIANT and the app environment in APP_ENV (both set by device-check-env; APP_ENV unset
+  builds the project's default, prod), installs the pods and builds the Release configuration
   for the simulator, ad-hoc signed ("Sign to Run Locally") so the app carries the entitlements prebuild generates
   and can use the Keychain. Needs no secret, no certificate and no Apple account. Outputs the path of the .app.
 outputs:
@@ -14,8 +15,8 @@ runs:
   using: composite
   steps:
     - name: Switch crash reporting, the source map upload and the real sign-in off, as for the CI APK
-      # The device-check app is built with no APP_ENV and no Sentry upload token, and keeps the mock sign-in
-      # (see build-android-apk).
+      # The device-check app has no Sentry upload token, its runs are test runs whatever APP_ENV it is built for,
+      # and it keeps the mock sign-in (see build-android-apk).
       shell: bash
       run: |
         echo "CRASH_REPORTING=off" >> "$GITHUB_ENV"
