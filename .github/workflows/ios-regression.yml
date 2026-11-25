@@ -15,8 +15,8 @@ name: ios-regression
 #                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
 #                     (prod) as before. APP_ID comes from the resolved Expo config either way, so a `.dev` id is right.
 #   runtimes          A JSON array of iOS versions, such as '["27.1","26.4"]', each installed on the runner;
-#                     "newest" is the newest one installed. Default: '["newest"]'. A version the runner lacks fails
-#                     its job with the list of what is installed.
+#                     "newest" is the newest one installed with a standard iPhone. Default: '["newest"]'. A version
+#                     the runner lacks fails its job with the list of what is installed.
 #   retention-days    How many days GitHub keeps each runtime's `ios-regression-<runtime>` artifact (about 45 MB). Default:
 #                     3, so the weekly reports do not fill the organization's artifact storage; the run's summary
 #                     stays on the run page. A project that reads the screenshots later can raise it.
