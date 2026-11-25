@@ -29,9 +29,20 @@ const pick = (version?: string, input = JSON.stringify(list)) =>
   spawnSync("node", [script, ...(version ? [version] : [])], { input, encoding: "utf8" });
 
 describe("ios-runtime", () => {
-  it("takes the newest available iOS runtime by default, comparing versions as numbers", () => {
-    expect(pick().stdout).toBe("com.apple.CoreSimulator.SimRuntime.iOS-27-1 com.apple.CoreSimulator.SimDeviceType.iPhone-Duo\n");
+  it("takes the newest available iOS runtime with a plain numbered iPhone by default, comparing versions as numbers", () => {
+    expect(pick().stdout).toBe("com.apple.CoreSimulator.SimRuntime.iOS-26-4 com.apple.CoreSimulator.SimDeviceType.iPhone-17\n");
     expect(pick("newest").stdout).toBe(pick().stdout);
+  });
+
+  it("takes the newest runtime and its first iPhone when no runtime has a plain numbered iPhone", () => {
+    const odd = { runtimes: [runtime("27.1", ["iPhone Duo"]), runtime("26.4", ["iPhone Air"])] };
+    expect(pick(undefined, JSON.stringify(odd)).stdout).toBe(
+      "com.apple.CoreSimulator.SimRuntime.iOS-27-1 com.apple.CoreSimulator.SimDeviceType.iPhone-Duo\n",
+    );
+  });
+
+  it("keeps an asked version even when it has only an odd iPhone", () => {
+    expect(pick("27.1").stdout).toBe("com.apple.CoreSimulator.SimRuntime.iOS-27-1 com.apple.CoreSimulator.SimDeviceType.iPhone-Duo\n");
   });
 
   it("takes the runtime of a version, and its first plain numbered iPhone", () => {

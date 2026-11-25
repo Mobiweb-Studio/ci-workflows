@@ -2,8 +2,8 @@
 # Gives a device job a simulator of its own, and removes it afterwards.
 #
 #   ios-simulator.sh create <app>   Creates ci-<run id>-<attempt> on the iOS runtime in IOS_RUNTIME (a version such
-#                                   as 26.4; empty or "newest" for the newest installed), in en_US, boots it,
-#                                   installs the app and writes IOS_UDID to GITHUB_ENV.
+#                                   as 26.4; empty or "newest" for the newest installed with a standard iPhone), in
+#                                   en_US, boots it, installs the app and writes IOS_UDID to GITHUB_ENV.
 #   ios-simulator.sh delete         Shuts down, erases and deletes the simulator in IOS_UDID, if any.
 #
 # ios-runtime.mjs picks the runtime and the iPhone.
