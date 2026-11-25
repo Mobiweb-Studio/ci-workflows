@@ -125,7 +125,7 @@ runs:
           --android-build-tools-dir "$BUILD_TOOLS"
     - name: Build the APK, none was cached for this fingerprint
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-      uses: Mobiweb-Studio/ci-workflows/actions/build-android-apk@main
+      uses: Mobiweb-Studio/ci-workflows/actions/build-android-apk@v1.19.0-rc.1
       with:
         reference-vendor: ${{ inputs.reference-vendor }}
         app-env: ${{ inputs.app-env }}
