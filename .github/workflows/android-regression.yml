@@ -14,6 +14,9 @@ name: android-regression
 #   app-env           The project's app environment to build and test, such as `dev`, exported as APP_ENV to the
 #                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
 #                     (prod) as before. APP_ID comes from the resolved Expo config either way, so a `.dev` id is right.
+#   timeout-minutes   The job's time limit, the build and every flow included. Default: 90. A suite that grows past
+#                     it is cancelled with no verdict, so a project with many flows, or a runner it shares with
+#                     other jobs, raises it.
 # Secrets
 #   NPM_AUTH_TOKEN    Optional, as in device-checks: the device-apk action's `pnpm install` reads it from the job's env.
 #   MAESTRO_ENV       Optional, by name from the caller's repository secrets: the flows' variables, one
@@ -35,6 +38,9 @@ on:
       app-env:
         type: string
         default: ""
+      timeout-minutes:
+        type: number
+        default: 90
     secrets:
       NPM_AUTH_TOKEN:
         required: false
@@ -44,7 +50,7 @@ on:
 jobs:
   regression:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: read
     env:
