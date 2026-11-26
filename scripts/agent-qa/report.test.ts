@@ -152,7 +152,7 @@ describe("report.mjs", () => {
           "",
           "Screenshots: https://github.com/o/r/actions/runs/1/artifacts/2",
           "Run: https://github.com/o/r/actions/runs/1",
-          "Usage: 12 turns, 95 s, model cost $0.123 (ceiling $0.50).",
+          "Usage: 12 turns, 95 s, model cost $0.123 (ceiling $2.00).",
           "",
         ].join("\n"),
       );
@@ -209,10 +209,10 @@ describe("report.mjs", () => {
     it("warns when the run passed the cost ceiling", () => {
       const output = JSON.parse(resultEvent(passReport));
       const { comment } = run(
-        JSON.stringify({ ...output, total_cost_usd: 0.75 }),
+        JSON.stringify({ ...output, total_cost_usd: 2.5 }),
       );
       expect(comment).toContain(
-        "**Warning: the run passed the $0.50 cost ceiling.**",
+        "**Warning: the run passed the $2.00 cost ceiling.**",
       );
     });
 

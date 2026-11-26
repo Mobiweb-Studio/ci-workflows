@@ -37,7 +37,7 @@ describe("run-agent.sh", () => {
     expect(command).toContain("> qa-claude-transcript.jsonl 2> qa-claude-error.log");
   });
 
-  it("takes the model from QA_MODEL, haiku when it is not set", () => {
-    expect(command).toContain('--model "${QA_MODEL:-haiku}" \\\n');
+  it("takes the model from QA_MODEL, claude-sonnet-5-5 when it is not set", () => {
+    expect(command).toContain('--model "${QA_MODEL:-claude-sonnet-5-5}" \\\n');
   });
 });

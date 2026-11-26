@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs Claude Code as the QA agent. It may only run `agent-device` commands and `qa-fill-secret` (bin/, which types a
 # test account's value from MAESTRO_ENV without showing it to the agent), ignores the
-# repository's own Claude settings, and stops at QA_MAX_TURNS turns (default 40) or QA_MAX_BUDGET_USD of model
-# cost (default 0.50). QA_MODEL names the model (default haiku).
+# repository's own Claude settings, and stops at QA_MAX_TURNS turns (default 100) or QA_MAX_BUDGET_USD of model
+# cost (default 2). QA_MODEL names the model (default claude-sonnet-5-5).
 # Writes the whole run to qa-claude-transcript.jsonl, one JSON event per line: each tool call and its output, and last
 # the result event (the object `--output-format json` would write), which report.mjs reads.
 # Needs APP_VARIANT (the vendor under test) and APP_ID (its Android package).
@@ -20,9 +20,9 @@ PATH="$(cd "$(dirname "$0")" && pwd)/bin:$PATH"
 export PATH
 
 claude -p \
-  --model "${QA_MODEL:-haiku}" \
-  --max-turns "${QA_MAX_TURNS:-40}" \
-  --max-budget-usd "${QA_MAX_BUDGET_USD:-0.50}" \
+  --model "${QA_MODEL:-claude-sonnet-5-5}" \
+  --max-turns "${QA_MAX_TURNS:-100}" \
+  --max-budget-usd "${QA_MAX_BUDGET_USD:-2}" \
   --output-format stream-json \
   --verbose \
   --no-session-persistence \

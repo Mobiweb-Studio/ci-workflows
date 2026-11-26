@@ -4,8 +4,8 @@ name: ios-regression
 # refuses any event but schedule and workflow_dispatch: never trigger it from a pull request.
 on:
   schedule:
-    # Sundays at 03:00 UTC, when the iOS runner is idle.
-    - cron: "0 3 * * 0"
+    # Sundays at 03:47 UTC, when the iOS runner is idle, and off the hour, where GitHub's schedule queue is busiest.
+    - cron: "47 3 * * 0"
   workflow_dispatch:
 
 permissions:
