@@ -10,6 +10,9 @@ name: release
 #   runner         The runner label for every job. Default: ubuntu-latest, a GitHub-hosted runner.
 #   enabled        true to run. Off until the owner opts in. Pass `${{ vars.RELEASE_PLEASE_ENABLED == 'true' }}`.
 #                  See docs/ai/lifecycle.md ("Changelog and releases") before turning it on.
+#   build          false to keep only release-please (the version, changelog, tag and GitHub release) and never
+#                  build or submit: for a project whose store builds run elsewhere, such as a client's own repository
+#                  on EAS Workflows. Default: true. With false the caller needs no EXPO_TOKEN.
 #   config-file, manifest-file
 #                  The release-please configuration and manifest. Defaults: release-please-config.json and
 #                  .release-please-manifest.json.
@@ -37,6 +40,9 @@ on:
       enabled:
         type: boolean
         default: false
+      build:
+        type: boolean
+        default: true
       config-file:
         type: string
         default: release-please-config.json
@@ -69,13 +75,13 @@ jobs:
           config-file: ${{ inputs.config-file }}
           manifest-file: ${{ inputs.manifest-file }}
 
-  # Runs only when the push merged a release PR. Builds that release's tag for both stores and
+  # Runs only when the push merged a release PR, and the caller left `build` on. Builds that release's tag for both stores and
   # submits it to TestFlight and Google Play internal testing. Promoting to store production is
   # manual, in each store console: see docs/ai/first-release.md. This job is in the same workflow
   # because a tag created with the default token does not start other workflows.
   release:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ inputs.build && needs.release-please.outputs.release_created == 'true' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 90
     # Holds EXPO_TOKEN. Limit this environment to main and release tags in the repository settings.
