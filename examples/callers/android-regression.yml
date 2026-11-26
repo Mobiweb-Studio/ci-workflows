@@ -5,8 +5,8 @@ name: android-regression
 # pull request.
 on:
   schedule:
-    # Every night at 02:00 UTC, when nobody waits on the runners.
-    - cron: "0 2 * * *"
+    # Every night at 02:17 UTC, when nobody waits on the runners, and off the hour, where GitHub's schedule queue is busiest.
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
 permissions:

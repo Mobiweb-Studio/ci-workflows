@@ -20,7 +20,7 @@ name: ios-regression
 #   retention-days    How many days GitHub keeps each runtime's `ios-regression-<runtime>` artifact (about 45 MB). Default:
 #                     3, so the weekly reports do not fill the organization's artifact storage; the run's summary
 #                     stays on the run page. A project that reads the screenshots later can raise it.
-#   timeout-minutes   The job's time limit, the build and every flow included. Default: 90. A suite that grows past
+#   timeout-minutes   The job's time limit, the build and every flow included. Default: 150. A suite that grows past
 #                     it is cancelled with no verdict, so a project with many flows, or a runner it shares with
 #                     other jobs, raises it.
 # Secrets
@@ -57,7 +57,7 @@ on:
         default: 3
       timeout-minutes:
         type: number
-        default: 90
+        default: 150
     secrets:
       NPM_AUTH_TOKEN:
         required: false

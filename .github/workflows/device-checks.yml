@@ -37,8 +37,8 @@ name: device-checks
 #                     passes false, and that check never runs: its job is skipped and the shared APK is made
 #                     only for the other one.
 #   qa-agent-max-turns, qa-agent-max-budget-usd
-#                     The QA agent's turn limit and model cost ceiling in US dollars. Default: 40 turns and $0.50.
-#   qa-agent-model    The QA agent's model, a Claude Code alias or model id, such as claude-sonnet-5-5. Default: haiku.
+#                     The QA agent's turn limit and model cost ceiling in US dollars. Default: 100 turns and $2.
+#   qa-agent-model    The QA agent's model, a Claude Code alias or model id, such as claude-sonnet-5-5. Default: claude-sonnet-5-5.
 #   earlier-checks    The checks of the earlier stages the gate waits for, one per line. Default: the names the
 #                     shared `ci` and `docs-check` workflows report when their caller jobs are `ci` and
 #                     `docs-check`.
@@ -115,13 +115,13 @@ on:
         default: true
       qa-agent-max-turns:
         type: number
-        default: 40
+        default: 100
       qa-agent-max-budget-usd:
         type: number
-        default: 0.5
+        default: 2
       qa-agent-model:
         type: string
-        default: haiku
+        default: claude-sonnet-5-5
       earlier-checks:
         type: string
         default: |

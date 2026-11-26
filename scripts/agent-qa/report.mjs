@@ -2,10 +2,10 @@
 // Reads qa-claude-transcript.jsonl (one event per line; the last is the result) and writes qa-comment.md,
 // qa-status.txt and qa-report.json (the same verdict as data, for the Jira evidence job).
 // Env: HAS_ACK ("true" when the PR has the qa-acknowledged label), ARTIFACT_URL, RUN_URL, QA_MAX_BUDGET_USD (the
-// cost ceiling the agent ran with, default 0.50).
+// cost ceiling the agent ran with, default 2).
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
-const COST_CEILING_USD = Number(process.env.QA_MAX_BUDGET_USD || 0.5);
+const COST_CEILING_USD = Number(process.env.QA_MAX_BUDGET_USD || 2);
 const STATUSES = ["pass", "product_issue", "inconclusive"];
 
 const acknowledged = process.env.HAS_ACK === "true";
