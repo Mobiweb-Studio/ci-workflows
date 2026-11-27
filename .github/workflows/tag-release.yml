@@ -3,7 +3,8 @@ name: tag-release
 # Cuts a release of the shared workflows. Started by hand from `main` only. It runs the tests, rewrites the
 # internal references to the release's own exact tag, commits that, and tags it. A release candidate
 # (1.2.3-rc.1) is tagged and nothing else moves, so a scratch project can rehearse it. A release (1.2.3) also
-# moves its floating major (v1) to the new tag, but only when `rehearsal-passed` is true, and never for a candidate.
+# moves its floating major (v1) to the new tag, but only when `rehearsal-passed` is true or `skip-rehearsal-reason`
+# says why there was none, and never for a candidate. The release tag is annotated, and its message records which.
 # Rollback is moving the floating major back to the previous exact tag by hand.
 #
 # The job runs in the protected environment `release`, whose required reviewers approve every run. The release
@@ -21,6 +22,10 @@ on:
         description: "A scratch project's CI passed against this release's candidate tag"
         type: boolean
         default: false
+      skip-rehearsal-reason:
+        description: "Only to release without a rehearsal: why it was skipped. Kept in the tag's message"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -77,25 +82,42 @@ jobs:
       - name: Point the internal references at this release and tag it
         env:
           VERSION: ${{ inputs.version }}
+          REHEARSAL_PASSED: ${{ inputs.rehearsal-passed }}
+          SKIP_REHEARSAL_REASON: ${{ inputs.skip-rehearsal-reason }}
           RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
         run: |
           node scripts/set-ref.mjs "v$VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "chore(release): v$VERSION"
-          git tag "v$VERSION"
+          # The tag's message records how the release was checked: `git tag -l --format='%(contents)' v1.2.3`.
+          case "$VERSION" in
+            *-rc.*) MESSAGE="Release candidate v$VERSION." ;;
+            *)
+              if [ "$REHEARSAL_PASSED" = "true" ]; then
+                MESSAGE="Release v$VERSION. Rehearsal: passed against its release candidate."
+              elif [ -n "$(printf '%s' "$SKIP_REHEARSAL_REASON" | tr -d '[:space:]')" ]; then
+                MESSAGE="Release v$VERSION. Rehearsal: skipped. Reason: $SKIP_REHEARSAL_REASON"
+              else
+                MESSAGE="Release v$VERSION. Rehearsal: not recorded, so the floating major did not move."
+              fi
+              ;;
+          esac
+          git tag -a "v$VERSION" -m "$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           git push "https://x-access-token:${RELEASE_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/v$VERSION"
       - name: Move the floating major
         env:
           VERSION: ${{ inputs.version }}
           REHEARSAL_PASSED: ${{ inputs.rehearsal-passed }}
+          SKIP_REHEARSAL_REASON: ${{ inputs.skip-rehearsal-reason }}
           RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
         run: |
           case "$VERSION" in
             *-rc.*) echo "A release candidate does not move the floating major."; exit 0 ;;
           esac
-          if [ "$REHEARSAL_PASSED" != "true" ]; then
-            echo "The rehearsal was not recorded as passed: v$VERSION is tagged and the floating major stays where it is."
+          if [ "$REHEARSAL_PASSED" != "true" ] && [ -z "$(printf '%s' "$SKIP_REHEARSAL_REASON" | tr -d '[:space:]')" ]; then
+            echo "The rehearsal was neither recorded as passed nor skipped with a reason: v$VERSION is tagged and the floating major stays where it is."
             exit 0
           fi
           if [ -z "$(git tag -l "v$VERSION-rc.*")" ]; then
@@ -103,6 +125,7 @@ jobs:
             exit 0
           fi
           MAJOR="v${VERSION%%.*}"
-          git tag -f "$MAJOR" "v$VERSION"
+          # The release tag is annotated, so the floating major names its commit, not the tag object.
+          git tag -f "$MAJOR" "v$VERSION^{commit}"
           git push --force "https://x-access-token:${RELEASE_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$MAJOR"
           echo "$MAJOR now points at v$VERSION."

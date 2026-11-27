@@ -118,6 +118,8 @@ describe("wait-for-checks", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("commits");
     expect(result.stderr).toContain("failure");
+    // A failing gate says how to pass it.
+    expect(result.stderr).toContain("To pass: fix what commits reports and push");
   });
 
   it("fails on a named check that was skipped", () => {
@@ -192,6 +194,7 @@ describe("wait-for-checks", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("commits");
     expect(result.stderr).toContain("cancelled");
+    expect(result.stderr).toContain("To pass: re-run this job once they finish");
   });
 
   it("uses the newer run of a name: an old failure that was re-run and passed", () => {

@@ -118,6 +118,10 @@ const reasons = [];
 if (!marked)
   reasons.push(`there is no agent review comment for ${head} (marker "<!-- ${marker}: ${head} -->")`);
 if (labelled) reasons.push(`the label ${label} was applied to this pull request`);
+// A failing gate says how to pass it, so nobody has to read this script to find out.
+const fix = labelled
+  ? `To pass: someone with ${permissions.join(", ")} access, other than ${author}, approves this commit in the pull request's review. Removing the label does not reopen the agent-only path.`
+  : `To pass: run the agent review on this commit, which posts the marked comment, or have someone with ${permissions.join(", ")} access, other than ${author}, approve this commit. Then re-run this job.`;
 fail(
-  `a person must approve ${head}: ${reasons.join(" and ")}, and no approval of this commit from someone with ${permissions.join(", ")} access was found`,
+  `a person must approve ${head}: ${reasons.join(" and ")}, and no approval of this commit from someone with ${permissions.join(", ")} access was found. ${fix}`,
 );

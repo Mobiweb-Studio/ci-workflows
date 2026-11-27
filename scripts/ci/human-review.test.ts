@@ -98,6 +98,7 @@ describe("human-review", () => {
     const stale = run({ comments: [agentReview(OLD)] });
     expect(stale.status).toBe(1);
     expect(stale.output).toContain("no agent review comment");
+    expect(stale.output).toContain("To pass: run the agent review on this commit");
 
     const approved = run({
       comments: [agentReview(OLD)],
@@ -121,6 +122,9 @@ describe("human-review", () => {
     });
     expect(withLabel.status).toBe(1);
     expect(withLabel.output).toContain("needs-human-review was applied");
+    // A failing gate says how to pass it: here only a person's approval does.
+    expect(withLabel.output).toContain("approves this commit in the pull request's review");
+    expect(withLabel.output).toContain("Removing the label does not reopen");
 
     const approved = run({
       comments: [agentReview(HEAD)],

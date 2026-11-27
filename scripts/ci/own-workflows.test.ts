@@ -58,15 +58,30 @@ describe("tag-release.yml", () => {
     expect(text).toContain("The version must look like");
     expect(text).toContain("Tags are immutable");
     for (const line of text.split("\n").filter((l) => l.includes("${{ inputs."))) {
-      expect(line).toMatch(/^\s+(VERSION|REHEARSAL_PASSED|RELEASE_PUSH_TOKEN): \$\{\{ (inputs|secrets)\.[\w-]+ \}\}$|^\s+description|default/);
+      expect(line).toMatch(/^\s+(VERSION|REHEARSAL_PASSED|SKIP_REHEARSAL_REASON|RELEASE_PUSH_TOKEN): \$\{\{ (inputs|secrets)\.[\w-]+ \}\}$|^\s+description|default/);
     }
+  });
+
+  it("records in the release tag whether the rehearsal passed, was skipped and why, or was not recorded", () => {
+    const tagStep = text.slice(
+      text.indexOf("- name: Point the internal references"),
+      text.indexOf("- name: Move the floating major"),
+    );
+    expect(tagStep).toContain('git tag -a "v$VERSION" -m "$MESSAGE"');
+    expect(tagStep).not.toMatch(/git tag "v\$VERSION"\n/);
+    expect(tagStep).toContain("Rehearsal: passed");
+    expect(tagStep).toContain("Rehearsal: skipped. Reason: $SKIP_REHEARSAL_REASON");
+    expect(tagStep).toContain("Rehearsal: not recorded");
+    expect(text).toMatch(/skip-rehearsal-reason:\n {8}description: .+\n {8}type: string\n {8}default: ""\n/);
+    // An annotated tag is an object of its own: the floating major must name the commit.
+    expect(text).toContain('git tag -f "$MAJOR" "v$VERSION^{commit}"');
   });
 
   it("moves the floating major only for a release whose rehearsal passed, never for a candidate", () => {
     const move = text.slice(text.indexOf("- name: Move the floating major"));
     expect(move.indexOf("*-rc.*")).toBeGreaterThan(-1);
     expect(move.indexOf("*-rc.*")).toBeLessThan(move.indexOf("git tag -f"));
-    expect(move.indexOf('"$REHEARSAL_PASSED" != "true"')).toBeGreaterThan(-1);
+    expect(move.indexOf('"$REHEARSAL_PASSED" != "true" ] && [ -z')).toBeGreaterThan(-1);
     expect(move.indexOf('"$REHEARSAL_PASSED" != "true"')).toBeLessThan(
       move.indexOf("git tag -f"),
     );
