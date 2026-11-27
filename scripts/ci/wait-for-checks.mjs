@@ -99,13 +99,13 @@ function evaluate(runs) {
       if (Date.now() - seen.since >= graceSeconds * 1000)
         return {
           state: "failed",
-          message: `${name} ended as cancelled and no newer run appeared within ${graceSeconds} seconds, so the later stages do not run`,
+          message: `${name} ended as cancelled and no newer run appeared within ${graceSeconds} seconds, so the later stages do not run. To pass: re-run ${name}, then re-run this job`,
         };
       cancelled.push(name);
     } else if (checkRun.conclusion !== "success")
       return {
         state: "failed",
-        message: `${name} ended as ${checkRun.conclusion}, so the later stages do not run`,
+        message: `${name} ended as ${checkRun.conclusion}, so the later stages do not run. To pass: fix what ${name} reports and push, or re-run it if it failed for no reason in the change; a push runs this job again, a re-run of ${name} does not, so re-run this job after it`,
       };
   }
   if (missing.length || unfinished.length || cancelled.length)
@@ -146,4 +146,6 @@ if (verdict.cancelled.length)
   parts.push(
     `${verdict.cancelled.join(", ")} cancelled, waiting for a newer run`,
   );
-fail(`gave up after ${timeoutSeconds} seconds: ${parts.join("; ")}`);
+fail(
+  `gave up after ${timeoutSeconds} seconds: ${parts.join("; ")}. To pass: re-run this job once they finish; a check that never appears is not triggered for this pull request (check the caller's triggers and path filters, and the earlier-checks input)`,
+);

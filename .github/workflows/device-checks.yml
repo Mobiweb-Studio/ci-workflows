@@ -67,7 +67,8 @@ name: device-checks
 #                     ticket; `onedrive` uploads the screenshots and qa-report.json of every run to a SharePoint or
 #                     OneDrive library with Microsoft Graph, and the comment links the folder with a view-only link
 #                     for the organization. Needs the secrets MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET (an
-#                     app registration with Sites.Selected, granted write on the one site).
+#                     app registration with Sites.Selected, granted write on the one site). Recommended for a project that
+#                     runs device checks on most PRs: Jira attachment storage fills within weeks (README).
 #   onedrive-drive-id The document library's drive id, when `jira-evidence-storage` is `onedrive`.
 #   onedrive-folder   The folder in that library that holds the evidence, such as `ICligo/QA evidence`. Under it:
 #                     <story>/<ticket>/<YYYY-MM-DD HH-MM> PR-<n> passed|failed[ attempt <k>]/ (UTC), and
