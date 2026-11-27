@@ -20,6 +20,9 @@ name: ios-regression
 #   retention-days    How many days GitHub keeps each runtime's `ios-regression-<runtime>` artifact (about 45 MB). Default:
 #                     3, so the weekly reports do not fill the organization's artifact storage; the run's summary
 #                     stays on the run page. A project that reads the screenshots later can raise it.
+#   maestro-version   The Maestro CLI version the flows run with. Default: 2.10.0. A project whose client runs the
+#                     flows on another version (EAS Workflows' Maestro, such as 2.6.1) passes that one, so a command
+#                     the client's version lacks fails here and not one release later in the client's repository.
 #   timeout-minutes   The job's time limit, the build and every flow included. Default: 150. A suite that grows past
 #                     it is cancelled with no verdict, so a project with many flows, or a runner it shares with
 #                     other jobs, raises it.
@@ -55,6 +58,9 @@ on:
       retention-days:
         type: number
         default: 3
+      maestro-version:
+        type: string
+        default: 2.10.0
       timeout-minutes:
         type: number
         default: 150
@@ -78,7 +84,7 @@ jobs:
       matrix:
         runtime: ${{ fromJSON(inputs.runtimes) }}
     env:
-      MAESTRO_VERSION: 2.10.0
+      MAESTRO_VERSION: ${{ inputs.maestro-version }}
       MAESTRO_PLATFORM: ios
       MAESTRO_ALL_FLOWS: "true"
       IOS_RUNTIME: ${{ matrix.runtime }}
@@ -111,9 +117,8 @@ jobs:
           APP_PATH: ${{ steps.app.outputs.app-path }}
         run: bash "$CI_WORKFLOWS_DIR/scripts/ci/ios-simulator.sh" create "$APP_PATH"
       - name: Install Maestro
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        # In this job's RUNNER_TEMP, at the maestro-version input, never in the runner's shared ~/.maestro.
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/install-maestro.sh"
       - name: Run every Maestro flow on the simulator
         # Untagged flows are expected to fail on iOS; the next step decides what fails the job.
         continue-on-error: true
