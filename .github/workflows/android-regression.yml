@@ -14,6 +14,13 @@ name: android-regression
 #   app-env           The project's app environment to build and test, such as `dev`, exported as APP_ENV to the
 #                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
 #                     (prod) as before. APP_ID comes from the resolved Expo config either way, so a `.dev` id is right.
+#   android-profile   The Android emulator's hardware profile for the Maestro flows. Default: pixel_6, a phone screen
+#                     (1080x2400, 420 dpi). Empty gives Android's default 320x640 screen at 160 dpi, the size of EAS's
+#                     Android emulator: a project whose client runs the flows there passes "" (in its regression, or
+#                     in a check before it hands a release over), so the flows are written for the short screen.
+#   maestro-version   The Maestro CLI version the flows run with. Default: 2.10.0. A project whose client runs the
+#                     flows on another version (EAS Workflows' Maestro, such as 2.6.1) passes that one, so a command
+#                     the client's version lacks fails here and not one release later in the client's repository.
 #   timeout-minutes   The job's time limit, the build and every flow included. Default: 150. A suite that grows past
 #                     it is cancelled with no verdict, so a project with many flows, or a runner it shares with
 #                     other jobs, raises it.
@@ -38,6 +45,12 @@ on:
       app-env:
         type: string
         default: ""
+      android-profile:
+        type: string
+        default: pixel_6
+      maestro-version:
+        type: string
+        default: 2.10.0
       timeout-minutes:
         type: number
         default: 150
@@ -54,7 +67,7 @@ jobs:
     permissions:
       contents: read
     env:
-      MAESTRO_VERSION: 2.10.0
+      MAESTRO_VERSION: ${{ inputs.maestro-version }}
       NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
     steps:
       - name: Require a schedule or workflow_dispatch event
@@ -91,9 +104,8 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Install Maestro
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        # In this job's RUNNER_TEMP, at the maestro-version input, never in the runner's shared ~/.maestro.
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/install-maestro.sh"
       - name: Run every Maestro flow on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -104,7 +116,7 @@ jobs:
           arch: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
           # A phone screen (1080x2400, 420 dpi). Without a profile the AVD gets Android's default 320x640 at
           # 160 dpi, where a screen's lower buttons sit under the app's tab bar and flows time out.
-          profile: pixel_6
+          profile: ${{ inputs.android-profile }}
           disable-animations: true
           script: |
             adb install "$APK_PATH"

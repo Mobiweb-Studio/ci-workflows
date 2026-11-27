@@ -33,6 +33,14 @@ name: device-checks
 #   app-env           The project's app environment to build and test, such as `dev`, exported as APP_ENV to the
 #                     app's build. Empty, the default, leaves APP_ENV unset, so the app builds as the project's default
 #                     (prod) as before. APP_ID comes from the resolved Expo config either way, so a `.dev` id is right.
+#   android-profile   The emulator's hardware profile for maestro-android (the QA agent keeps pixel_6). Default:
+#                     pixel_6, a phone screen (1080x2400, 420 dpi). Empty gives Android's default 320x640 screen at
+#                     160 dpi, the size of Expo's cloud Android emulator: a project whose client runs the flows there
+#                     passes "" (in its regression, or in a check before it hands a release over), so the flows are
+#                     written for the short screen.
+#   maestro-version   The Maestro CLI version the flows run with. Default: 2.10.0. A project whose client runs the
+#                     flows on another version (the Maestro of Expo's cloud workflows, such as 2.6.1) passes that
+#                     one, so a command the client's version lacks fails here, not one release later.
 #   maestro, qa-agent true by default. A project that declined a device check (docs/modules in the boilerplate)
 #                     passes false, and that check never runs: its job is skipped and the shared APK is made
 #                     only for the other one.
@@ -107,6 +115,12 @@ on:
       app-env:
         type: string
         default: ""
+      android-profile:
+        type: string
+        default: pixel_6
+      maestro-version:
+        type: string
+        default: 2.10.0
       maestro:
         type: boolean
         default: true
@@ -272,7 +286,7 @@ jobs:
     # each on an Apple Silicon Mac's emulator: 45 minutes stopped one halfway.
     timeout-minutes: 100
     env:
-      MAESTRO_VERSION: 2.10.0
+      MAESTRO_VERSION: ${{ inputs.maestro-version }}
       # Only the flows the change affects (ADR 0022 in ICligo); flows tagged `nightly` run only in the regression.
       MAESTRO_TAGS: ${{ needs.changes.outputs.maestro_tags }}
       MAESTRO_EXCLUDE_TAGS: nightly
@@ -312,18 +326,18 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Install Maestro
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        # In this job's RUNNER_TEMP, at the maestro-version input, never in the runner's shared ~/.maestro.
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/install-maestro.sh"
       - name: Run the Maestro flows on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           # x86_64 on Linux, arm64-v8a on an Apple Silicon Mac: the apk job built the APK for the same one.
           arch: ${{ runner.arch == 'ARM64' && 'arm64-v8a' || 'x86_64' }}
-          # A phone screen (1080x2400, 420 dpi). Without a profile the AVD gets Android's default 320x640 at
-          # 160 dpi, where a screen's lower buttons sit under the app's tab bar and flows time out.
-          profile: pixel_6
+          # pixel_6 by default, a phone screen (1080x2400, 420 dpi). Empty gives Android's default 320x640 at
+          # 160 dpi, the size of Expo's cloud emulator, where a screen's lower buttons sit under the app's tab
+          # bar unless the flows scroll to them.
+          profile: ${{ inputs.android-profile }}
           disable-animations: true
           script: |
             adb install android/app/build/outputs/apk/release/app-release.apk
@@ -364,7 +378,7 @@ jobs:
     # The only secret is the optional npm token, which the device-ios-app action's `pnpm install` reads from the
     # job's env and writes to a user-level .npmrc under RUNNER_TEMP, never to the Mac's own ~/.npmrc.
     env:
-      MAESTRO_VERSION: 2.10.0
+      MAESTRO_VERSION: ${{ inputs.maestro-version }}
       MAESTRO_PLATFORM: ios
       MAESTRO_TAGS: ${{ needs.changes.outputs.maestro_tags }}
       MAESTRO_EXCLUDE_TAGS: nightly
@@ -396,9 +410,8 @@ jobs:
           APP_PATH: ${{ steps.app.outputs.app-path }}
         run: bash "$CI_WORKFLOWS_DIR/scripts/ci/ios-simulator.sh" create "$APP_PATH"
       - name: Install Maestro
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        # In this job's RUNNER_TEMP, at the maestro-version input, never in the runner's shared ~/.maestro.
+        run: bash "$CI_WORKFLOWS_DIR/scripts/ci/install-maestro.sh"
       - name: Run the Maestro flows tagged ios on the simulator
         run: bash "$CI_WORKFLOWS_DIR/scripts/ci/run-maestro.sh"
       - name: Take the Maestro variables out of Maestro's output

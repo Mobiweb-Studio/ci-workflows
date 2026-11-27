@@ -24,6 +24,10 @@ jobs:
       # The project's app environment to build and test, such as dev, so the flows sign in to its backend with its
       # test users. Empty or absent builds the project's default (prod), as before. Use the same value in every device caller (device-checks, native-cache and the regressions):
       # app-env: dev
+      # A client that runs the flows on Expo's cloud emulator (320x640) and its Maestro: test on the same, so a flow
+      # that fails there fails here first.
+      # android-profile: ""
+      # maestro-version: 2.6.1
     # A repository secret, passed by name. Only a project whose .npmrc reads private packages needs it.
     secrets:
       NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
